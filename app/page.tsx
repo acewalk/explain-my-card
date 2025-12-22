@@ -297,13 +297,14 @@ export default function Home() {
               top: 44,
               left: 0,
               width: 360,
-              background: "white",
-              border: "1px solid #ccc",
+              background: "#111",              // dark background
+              border: "1px solid #333",
               borderRadius: 8,
-              boxShadow: "0 8px 20px rgba(0,0,0,0.08)",
+              boxShadow: "0 8px 20px rgba(0,0,0,0.6)",
               zIndex: 20,
               overflow: "hidden",
             }}
+
           >
             {suggestions.map((s, i) => (
               <div
@@ -317,9 +318,10 @@ export default function Home() {
                 style={{
                   padding: "10px 12px",
                   cursor: "pointer",
-                  background: i === activeIndex ? "#f2f2f2" : "white",
+                  background: i === activeIndex ? "#222" : "#111",
+                  color: "#f5f5f5",                 // light text
                   borderBottom:
-                    i === suggestions.length - 1 ? "none" : "1px solid #eee",
+                    i === suggestions.length - 1 ? "none" : "1px solid #333",
                 }}
               >
                 {s}
