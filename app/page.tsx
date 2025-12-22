@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 // Beginner-friendly explanations you write (start small, expand over time)
 const EXPLAINERS: Record<string, string> = {
@@ -18,7 +18,7 @@ const EXPLAINERS: Record<string, string> = {
 
   "Rhystic Study":
     "Rhystic Study is a card-draw engine. Whenever an opponent casts a spell, they must either pay 1 extra mana or you draw a card. In multiplayer games, opponents often choose not to pay, which can let you draw many cards over the course of the game.",
-     
+
   "Cultivate":
     "Cultivate is a ramp spell. You search your library for two basic lands: one goes onto the battlefield tapped, and the other goes into your hand. This both increases your mana for future turns and makes sure you keep hitting land drops.",
 
@@ -70,19 +70,52 @@ const SYNERGIES: Record<string, { name: string; reason: string }[]> = {
   "Sol Ring": [
     { name: "Arcane Signet", reason: "more fast mana to ramp early." },
     { name: "Thran Dynamo", reason: "a bigger ramp follow-up once you’re ahead." },
-    { name: "Sensei’s Divining Top", reason: "extra mana helps you activate it repeatedly early." },
+    {
+      name: "Sensei’s Divining Top",
+      reason: "extra mana helps you activate it repeatedly early.",
+    },
   ],
   "Arcane Signet": [
-    { name: "Sol Ring", reason: "fast mana helps you cast Signet and accelerate quickly." },
-    { name: "Command Tower", reason: "fixes colors and is a staple land in Commander." },
-    { name: "Fellwar Stone", reason: "often taps for your colors in multiplayer games." },
+    {
+      name: "Sol Ring",
+      reason: "fast mana helps you cast Signet and accelerate quickly.",
+    },
+    {
+      name: "Command Tower",
+      reason: "fixes colors and is a staple land in Commander.",
+    },
+    {
+      name: "Fellwar Stone",
+      reason: "often taps for your colors in multiplayer games.",
+    },
   ],
 };
 
+type ScryfallCard = any;
+
+function useDebouncedValue<T>(value: T, delayMs: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(t);
+  }, [value, delayMs]);
+  return debounced;
+}
+
 export default function Home() {
   const [name, setName] = useState("");
-  const [card, setCard] = useState<any>(null);
+  const [card, setCard] = useState<ScryfallCard | null>(null);
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Autocomplete UI state
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const suggestionsRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const debouncedQuery = useDebouncedValue(name, 180);
 
   async function fetchCardByExactName(cardName: string) {
     setError("");
@@ -94,34 +127,123 @@ export default function Home() {
       return;
     }
 
+    setIsLoading(true);
     try {
       const res = await fetch(
         `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cleaned)}`
       );
-
       if (!res.ok) throw new Error("Card not found");
-
       const data = await res.json();
       setCard(data);
     } catch {
       setError("Card not found. Check spelling and try again.");
+    } finally {
+      setIsLoading(false);
     }
   }
 
   async function fetchCard() {
     await fetchCardByExactName(name);
+    setShowSuggestions(false);
+    setActiveIndex(-1);
   }
 
-  // Allow pressing Enter to search
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") fetchCard();
-  }
-
-  // Clicking synergy auto-fills search box + loads that card
   async function fetchCardByName(cardName: string) {
     setName(cardName);
+    setShowSuggestions(false);
+    setActiveIndex(-1);
     await fetchCardByExactName(cardName);
   }
+
+  // ---- Autocomplete: fetch suggestions from Scryfall
+  useEffect(() => {
+    const q = debouncedQuery.trim();
+    if (q.length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      setActiveIndex(-1);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(q)}`
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+
+        if (cancelled) return;
+
+        // data.data is an array of strings
+        const list: string[] = Array.isArray(data?.data) ? data.data : [];
+        setSuggestions(list.slice(0, 8));
+        setShowSuggestions(true);
+        setActiveIndex(-1);
+      } catch {
+        // ignore autocomplete errors
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedQuery]);
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      const target = e.target as Node;
+      if (
+        suggestionsRef.current &&
+        !suggestionsRef.current.contains(target) &&
+        inputRef.current &&
+        !inputRef.current.contains(target)
+      ) {
+        setShowSuggestions(false);
+        setActiveIndex(-1);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Escape") {
+      setShowSuggestions(false);
+      setActiveIndex(-1);
+      return;
+    }
+
+    if (e.key === "ArrowDown") {
+      if (!showSuggestions) setShowSuggestions(true);
+      setActiveIndex((prev) => Math.min(prev + 1, suggestions.length - 1));
+      return;
+    }
+
+    if (e.key === "ArrowUp") {
+      setActiveIndex((prev) => Math.max(prev - 1, -1));
+      return;
+    }
+
+    if (e.key === "Enter") {
+      if (showSuggestions && activeIndex >= 0 && suggestions[activeIndex]) {
+        e.preventDefault();
+        fetchCardByName(suggestions[activeIndex]);
+        return;
+      }
+      fetchCard();
+    }
+  }
+
+  const bestFormat = useMemo(() => {
+    if (!card) return "";
+    return card.legalities?.commander === "legal"
+      ? "Commander (EDH)"
+      : "Not legal in Commander";
+  }, [card]);
 
   return (
     <main style={{ padding: 24, fontFamily: "sans-serif", maxWidth: 900 }}>
@@ -131,32 +253,80 @@ export default function Home() {
         suggested synergies, and format guidance.
       </p>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <input
-          placeholder="e.g. Sol Ring"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={handleKeyDown}
-          style={{
-            padding: 10,
-            width: 320,
-            borderRadius: 8,
-            border: "1px solid #ccc",
-          }}
-        />
+      <div style={{ position: "relative", display: "inline-block" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            ref={inputRef}
+            placeholder="e.g. Sol Ring"
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              // If user edits, reopen suggestions (handled by effect)
+            }}
+            onKeyDown={handleKeyDown}
+            onFocus={() => {
+              if (suggestions.length > 0) setShowSuggestions(true);
+            }}
+            style={{
+              padding: 10,
+              width: 360,
+              borderRadius: 8,
+              border: "1px solid #ccc",
+            }}
+          />
 
-        <button
-          onClick={fetchCard}
-          style={{
-            padding: "10px 14px",
-            borderRadius: 8,
-            border: "1px solid #333",
-            cursor: "pointer",
-            fontWeight: 600,
-          }}
-        >
-          Explain
-        </button>
+          <button
+            onClick={fetchCard}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 8,
+              border: "1px solid #333",
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            {isLoading ? "Searching..." : "Explain"}
+          </button>
+        </div>
+
+        {showSuggestions && suggestions.length > 0 && (
+          <div
+            ref={suggestionsRef}
+            style={{
+              position: "absolute",
+              top: 44,
+              left: 0,
+              width: 360,
+              background: "white",
+              border: "1px solid #ccc",
+              borderRadius: 8,
+              boxShadow: "0 8px 20px rgba(0,0,0,0.08)",
+              zIndex: 20,
+              overflow: "hidden",
+            }}
+          >
+            {suggestions.map((s, i) => (
+              <div
+                key={s}
+                onMouseDown={(e) => {
+                  // prevent input blur before click registers
+                  e.preventDefault();
+                  fetchCardByName(s);
+                }}
+                onMouseEnter={() => setActiveIndex(i)}
+                style={{
+                  padding: "10px 12px",
+                  cursor: "pointer",
+                  background: i === activeIndex ? "#f2f2f2" : "white",
+                  borderBottom:
+                    i === suggestions.length - 1 ? "none" : "1px solid #eee",
+                }}
+              >
+                {s}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {error && (
@@ -205,15 +375,12 @@ export default function Home() {
               <strong>What this means (beginner-friendly):</strong>
             </p>
             <p style={{ whiteSpace: "pre-wrap" }}>
-              {EXPLAINERS[card.name] ??
+              {EXPLAINERS[card.name?.trim()] ??
                 "No beginner explanation written yet — but you can add one easily. (We’ll automate this later.)"}
             </p>
 
             <p style={{ marginTop: 16, marginBottom: 6 }}>
-              <strong>Best format:</strong>{" "}
-              {card.legalities?.commander === "legal"
-                ? "Commander (EDH)"
-                : "Not legal in Commander"}
+              <strong>Best format:</strong> {bestFormat}
             </p>
 
             <p style={{ marginTop: 16, marginBottom: 6 }}>
