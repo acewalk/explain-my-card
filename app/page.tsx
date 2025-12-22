@@ -18,7 +18,7 @@ const EXPLAINERS: Record<string, string> = {
 
   "Rhystic Study":
     "Rhystic Study is a card-draw engine. Whenever an opponent casts a spell, they must either pay 1 extra mana or you draw a card. In multiplayer games, opponents often choose not to pay, which can let you draw many cards over the course of the game.",
-
+ 
   "Cultivate":
     "Cultivate is a ramp spell. You search your library for two basic lands: one goes onto the battlefield tapped, and the other goes into your hand. This both increases your mana for future turns and makes sure you keep hitting land drops.",
 
@@ -115,6 +115,12 @@ export default function Home() {
   const suggestionsRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  // Suggestions w/ images + cache
+  const [suggestionCards, setSuggestionCards] = useState<
+    { name: string; img?: string }[]
+  >([]);
+  const suggestionCache = useRef(new Map<string, string | undefined>());
+
   const debouncedQuery = useDebouncedValue(name, 180);
 
   async function fetchCardByExactName(cardName: string) {
@@ -155,11 +161,12 @@ export default function Home() {
     await fetchCardByExactName(cardName);
   }
 
-  // ---- Autocomplete: fetch suggestions from Scryfall
+  // Autocomplete: fetch suggestions + small images for top results
   useEffect(() => {
     const q = debouncedQuery.trim();
     if (q.length < 2) {
       setSuggestions([]);
+      setSuggestionCards([]);
       setShowSuggestions(false);
       setActiveIndex(-1);
       return;
@@ -177,11 +184,44 @@ export default function Home() {
 
         if (cancelled) return;
 
-        // data.data is an array of strings
         const list: string[] = Array.isArray(data?.data) ? data.data : [];
-        setSuggestions(list.slice(0, 8));
+        const top = list.slice(0, 8);
+
+        setSuggestions(top);
         setShowSuggestions(true);
         setActiveIndex(-1);
+
+        // fetch small images for up to 6 suggestions (keeps it fast)
+        const withImgs = await Promise.all(
+          top.slice(0, 6).map(async (nm) => {
+            if (suggestionCache.current.has(nm)) {
+              return { name: nm, img: suggestionCache.current.get(nm) };
+            }
+
+            try {
+              const r = await fetch(
+                `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(nm)}`
+              );
+              if (!r.ok) {
+                suggestionCache.current.set(nm, undefined);
+                return { name: nm, img: undefined };
+              }
+              const c = await r.json();
+              const img =
+                c?.image_uris?.small ||
+                c?.card_faces?.[0]?.image_uris?.small ||
+                undefined;
+
+              suggestionCache.current.set(nm, img);
+              return { name: nm, img };
+            } catch {
+              suggestionCache.current.set(nm, undefined);
+              return { name: nm, img: undefined };
+            }
+          })
+        );
+
+        if (!cancelled) setSuggestionCards(withImgs);
       } catch {
         // ignore autocomplete errors
       }
@@ -229,11 +269,15 @@ export default function Home() {
     }
 
     if (e.key === "Enter") {
-      if (showSuggestions && activeIndex >= 0 && suggestions[activeIndex]) {
+      const pick =
+        (suggestionCards[activeIndex]?.name ?? suggestions[activeIndex]) || "";
+
+      if (showSuggestions && activeIndex >= 0 && pick) {
         e.preventDefault();
-        fetchCardByName(suggestions[activeIndex]);
+        fetchCardByName(pick);
         return;
       }
+
       fetchCard();
     }
   }
@@ -245,10 +289,23 @@ export default function Home() {
       : "Not legal in Commander";
   }, [card]);
 
+  const dropdownItems = useMemo(() => {
+    // Prefer items with images for first few; fill the rest with name-only
+    const fromImages = suggestionCards;
+    if (fromImages.length === 0) return suggestions.map((n) => ({ name: n }));
+    const imgNames = new Set(fromImages.map((x) => x.name));
+    const rest = suggestions
+      .filter((n) => !imgNames.has(n))
+      .map((n) => ({ name: n }));
+    return [...fromImages, ...rest].slice(0, 8);
+  }, [suggestionCards, suggestions]);
+
   return (
     <main style={{ padding: 24, fontFamily: "sans-serif", maxWidth: 900 }}>
-      <h1 style={{ fontSize: 36, marginBottom: 8 }}>Explain My Card</h1>
-      <p style={{ marginTop: 0, lineHeight: 1.4 }}>
+      <h1 style={{ fontSize: 36, marginBottom: 8, color: "white" }}>
+        Explain My Card
+      </h1>
+      <p style={{ marginTop: 0, lineHeight: 1.4, color: "white" }}>
         Type a Magic: The Gathering card name to get a beginner-friendly explanation,
         suggested synergies, and format guidance.
       </p>
@@ -259,37 +316,40 @@ export default function Home() {
             ref={inputRef}
             placeholder="e.g. Sol Ring"
             value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              // If user edits, reopen suggestions (handled by effect)
-            }}
+            onChange={(e) => setName(e.target.value)}
             onKeyDown={handleKeyDown}
             onFocus={() => {
-              if (suggestions.length > 0) setShowSuggestions(true);
+              if (dropdownItems.length > 0) setShowSuggestions(true);
             }}
             style={{
               padding: 10,
               width: 360,
               borderRadius: 8,
-              border: "1px solid #ccc",
+              border: "1px solid #333",
+              background: "#0b0b0b",
+              color: "white",
+              outline: "none",
             }}
           />
 
           <button
             onClick={fetchCard}
+            disabled={isLoading}
             style={{
               padding: "10px 14px",
               borderRadius: 8,
-              border: "1px solid #333",
-              cursor: "pointer",
+              border: "1px solid #555",
+              cursor: isLoading ? "not-allowed" : "pointer",
               fontWeight: 600,
+              background: "#111",
+              color: "white",
             }}
           >
             {isLoading ? "Searching..." : "Explain"}
           </button>
         </div>
 
-        {showSuggestions && suggestions.length > 0 && (
+        {showSuggestions && dropdownItems.length > 0 && (
           <div
             ref={suggestionsRef}
             style={{
@@ -297,34 +357,53 @@ export default function Home() {
               top: 44,
               left: 0,
               width: 360,
-              background: "#111",              // dark background
+              background: "#111",
               border: "1px solid #333",
               borderRadius: 8,
               boxShadow: "0 8px 20px rgba(0,0,0,0.6)",
               zIndex: 20,
               overflow: "hidden",
             }}
-
           >
-            {suggestions.map((s, i) => (
+            {dropdownItems.map((item, i) => (
               <div
-                key={s}
+                key={item.name}
                 onMouseDown={(e) => {
-                  // prevent input blur before click registers
                   e.preventDefault();
-                  fetchCardByName(s);
+                  fetchCardByName(item.name);
                 }}
                 onMouseEnter={() => setActiveIndex(i)}
                 style={{
                   padding: "10px 12px",
                   cursor: "pointer",
                   background: i === activeIndex ? "#222" : "#111",
-                  color: "#f5f5f5",                 // light text
+                  color: "#f5f5f5",
                   borderBottom:
-                    i === suggestions.length - 1 ? "none" : "1px solid #333",
+                    i === dropdownItems.length - 1 ? "none" : "1px solid #333",
                 }}
               >
-                {s}
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {item.img ? (
+                    <img
+                      src={item.img}
+                      alt=""
+                      width={28}
+                      height={40}
+                      style={{ borderRadius: 4, objectFit: "cover" }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: 28,
+                        height: 40,
+                        borderRadius: 4,
+                        background: "#222",
+                        border: "1px solid #333",
+                      }}
+                    />
+                  )}
+                  <span>{item.name}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -332,7 +411,7 @@ export default function Home() {
       </div>
 
       {error && (
-        <p style={{ color: "red", marginTop: 12, fontWeight: 600 }}>{error}</p>
+        <p style={{ color: "#ff6b6b", marginTop: 12, fontWeight: 600 }}>{error}</p>
       )}
 
       {card && (
@@ -345,11 +424,12 @@ export default function Home() {
                 style={{
                   width: 260,
                   height: 360,
-                  border: "1px solid #ccc",
+                  border: "1px solid #333",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   borderRadius: 8,
+                  color: "white",
                 }}
               >
                 No image available
@@ -357,7 +437,7 @@ export default function Home() {
             )}
           </div>
 
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, color: "white" }}>
             <h2 style={{ marginTop: 0 }}>{card.name}</h2>
 
             <p style={{ marginBottom: 6 }}>
@@ -399,7 +479,7 @@ export default function Home() {
                         padding: 0,
                         border: "none",
                         background: "none",
-                        color: "blue",
+                        color: "#7db7ff",
                         textDecoration: "underline",
                         cursor: "pointer",
                         fontWeight: 700,
