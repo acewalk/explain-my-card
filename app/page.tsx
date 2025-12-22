@@ -5,9 +5,19 @@ import { useState } from "react";
 // Beginner-friendly explanations you write (start small, expand over time)
 const EXPLAINERS: Record<string, string> = {
   "Sol Ring":
-    "Sol Ring is a fast mana card. It gives you 2 colorless mana for only 1 mana, which helps you play bigger spells earlier than normal. In Commander, it’s one of the strongest early-game ramp cards.",
+    "Sol Ring is a fast mana card. You pay 1 mana to cast it, and it taps for 2 colorless mana. This lets you play bigger spells earlier than normal. In Commander, this often means getting ahead of the table very quickly if you draw it early.",
+
   "Arcane Signet":
-    "Arcane Signet is a ramp card. It taps for one mana of any color in your commander’s color identity, helping you cast your spells more consistently in Commander.",
+    "Arcane Signet is a mana ramp card. It taps for one mana of any color in your commander’s color identity. This helps you consistently cast your spells, especially in multi-color Commander decks.",
+
+  "Command Tower":
+    "Command Tower is a land that taps for any color in your commander’s color identity. Because it always fixes your colors with no downside, it is considered one of the best lands in Commander and is played in most decks.",
+
+  "Swords to Plowshares":
+    "Swords to Plowshares is a very efficient removal spell. It exiles a creature for just one mana, which permanently removes it. The creature’s controller gains life equal to its power, but the life gain is usually worth the trade to remove a dangerous threat.",
+
+  "Rhystic Study":
+    "Rhystic Study is a card-draw engine. Whenever an opponent casts a spell, they must either pay 1 extra mana or you draw a card. In multiplayer games, opponents often choose not to pay, which can let you draw many cards over the course of the game.",
 };
 
 // Structured synergy list with a reason. Clicking a synergy loads that card.
