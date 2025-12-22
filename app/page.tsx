@@ -18,7 +18,7 @@ const EXPLAINERS: Record<string, string> = {
 
   "Rhystic Study":
     "Rhystic Study is a card-draw engine. Whenever an opponent casts a spell, they must either pay 1 extra mana or you draw a card. In multiplayer games, opponents often choose not to pay, which can let you draw many cards over the course of the game.",
- 
+
   "Cultivate":
     "Cultivate is a ramp spell. You search your library for two basic lands: one goes onto the battlefield tapped, and the other goes into your hand. This both increases your mana for future turns and makes sure you keep hitting land drops.",
 
@@ -95,10 +95,12 @@ type ScryfallCard = any;
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debounced, setDebounced] = useState(value);
+
   useEffect(() => {
     const t = setTimeout(() => setDebounced(value), delayMs);
     return () => clearTimeout(t);
   }, [value, delayMs]);
+
   return debounced;
 }
 
@@ -120,6 +122,12 @@ export default function Home() {
     { name: string; img?: string }[]
   >([]);
   const suggestionCache = useRef(new Map<string, string | undefined>());
+
+  useEffect(() => {
+    if (suggestions.length > 0) {
+      setShowSuggestions(true);
+    }
+  }, [suggestionCards, suggestions]);
 
   const debouncedQuery = useDebouncedValue(name, 180);
 
@@ -290,14 +298,11 @@ export default function Home() {
   }, [card]);
 
   const dropdownItems = useMemo(() => {
-    // Prefer items with images for first few; fill the rest with name-only
-    const fromImages = suggestionCards;
-    if (fromImages.length === 0) return suggestions.map((n) => ({ name: n }));
-    const imgNames = new Set(fromImages.map((x) => x.name));
-    const rest = suggestions
-      .filter((n) => !imgNames.has(n))
-      .map((n) => ({ name: n }));
-    return [...fromImages, ...rest].slice(0, 8);
+    const imgMap = new Map(suggestionCards.map((x) => [x.name, x.img]));
+    return suggestions.slice(0, 8).map((n) => ({
+      name: n,
+      img: imgMap.get(n),
+    }));
   }, [suggestionCards, suggestions]);
 
   return (
