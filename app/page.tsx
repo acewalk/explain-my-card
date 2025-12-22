@@ -18,6 +18,51 @@ const EXPLAINERS: Record<string, string> = {
 
   "Rhystic Study":
     "Rhystic Study is a card-draw engine. Whenever an opponent casts a spell, they must either pay 1 extra mana or you draw a card. In multiplayer games, opponents often choose not to pay, which can let you draw many cards over the course of the game.",
+     
+  "Cultivate":
+    "Cultivate is a ramp spell. You search your library for two basic lands: one goes onto the battlefield tapped, and the other goes into your hand. This both increases your mana for future turns and makes sure you keep hitting land drops.",
+
+  "Kodama’s Reach":
+    "Kodama’s Reach is basically Cultivate. You search for two basic lands: one enters the battlefield tapped, and the other goes into your hand. Commander decks often run both because they do the same strong job consistently.",
+
+  "Path to Exile":
+    "Path to Exile is a cheap removal spell that exiles a creature. The tradeoff is that the creature’s controller may search for a basic land and put it onto the battlefield tapped. Exiling is very strong, so giving them a land is often worth removing a big threat.",
+
+  "Counterspell":
+    "Counterspell stops a spell from resolving. When you cast it, the spell you target is countered and goes to the graveyard instead of entering the battlefield or taking effect. This is a classic way to protect yourself from board wipes, combos, or big threats.",
+
+  "Cyclonic Rift":
+    "Cyclonic Rift returns nonland permanents to their owners’ hands. Normally it hits one permanent you don’t control, but if you pay the overload cost, it hits all nonland permanents your opponents control. In Commander, overloaded Rift often clears the board for a big winning swing.",
+
+  "Lightning Bolt":
+    "Lightning Bolt deals 3 damage to any target (a creature, player, or planeswalker). It’s simple but powerful: it can remove small creatures, finish off weakened creatures, or help close out a game.",
+
+  "Smothering Tithe":
+    "Smothering Tithe is a Treasure-making engine. Whenever an opponent draws a card, they must pay 2 mana or you create a Treasure token. Treasures can be sacrificed for mana, so this card can generate a huge mana advantage in multiplayer games.",
+
+  "Mystic Remora":
+    "Mystic Remora draws you cards when opponents cast noncreature spells unless they pay 4 mana. It has cumulative upkeep, meaning you must pay more and more mana each upkeep to keep it around. Many players use it early to draw a bunch of cards, then let it go when it gets too expensive.",
+
+  "Brainstorm":
+    "Brainstorm lets you draw 3 cards, then put 2 cards from your hand back on top of your library. It’s best when you can shuffle your library afterward (like with a fetch land), so you don’t get stuck drawing the cards you put back.",
+
+  "Sensei’s Divining Top":
+    "Sensei’s Divining Top helps you control what you draw. You can look at the top three cards of your library and rearrange them, and you can also draw a card by putting Top on top of your library. It’s strong when you can generate extra mana or repeatedly shuffle your deck.",
+
+  "Wrath of God":
+    "Wrath of God is a board wipe. It destroys all creatures, and they can’t be regenerated. This resets the battlefield when someone is too far ahead or when you need time to stabilize.",
+
+  "Teferi’s Protection":
+    "Teferi’s Protection is a powerful defensive spell. Your life total can’t change and all your permanents phase out until your next turn, meaning they basically disappear and can’t be affected. This can save you from board wipes, huge attacks, or combo damage.",
+
+  "Doubling Season":
+    "Doubling Season doubles tokens you create and doubles counters placed on your permanents. This can supercharge token strategies and planeswalkers (because they enter with extra loyalty counters), but it’s important to remember it affects counters being placed, not counters being moved.",
+
+  "The One Ring":
+    "The One Ring protects you for a turn (you gain protection from everything until your next turn), and it draws cards over time by adding burden counters and drawing that many cards. You lose 1 life for each burden counter during your upkeep, so it’s strong card advantage but comes with a growing life cost.",
+
+  "Dockside Extortionist":
+    "Dockside Extortionist creates Treasure tokens based on how many artifacts and enchantments your opponents control. In Commander, that number can be huge, so Dockside often creates a big burst of mana that can enable explosive turns or combos.",
 };
 
 // Structured synergy list with a reason. Clicking a synergy loads that card.
