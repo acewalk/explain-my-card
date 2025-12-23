@@ -1,572 +1,895 @@
-"use client";
+'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
-
-/* =========================
-   BEGINNER EXPLANATIONS (20)
-   ========================= */
-const EXPLAINERS: Record<string, string> = {
-  "Sol Ring":
-    "Sol Ring is a fast mana card. You pay 1 mana to cast it, and it taps for 2 colorless mana. This lets you play bigger spells earlier than normal. In Commander, this often means getting ahead of the table very quickly if you draw it early.",
-
-  "Arcane Signet":
-    "Arcane Signet is a mana ramp card. It taps for one mana of any color in your commander’s color identity. This helps you consistently cast your spells, especially in multi-color Commander decks.",
-
-  "Command Tower":
-    "Command Tower is a land that taps for any color in your commander’s color identity. Because it always fixes your colors with no downside, it is considered one of the best lands in Commander and is played in most decks.",
-
-  "Swords to Plowshares":
-    "Swords to Plowshares is a very efficient removal spell. It exiles a creature for just one mana, which permanently removes it. The creature’s controller gains life equal to its power, but the life gain is usually worth the trade to remove a dangerous threat.",
-
-  "Rhystic Study":
-    "Rhystic Study is a card-draw engine. Whenever an opponent casts a spell, they must either pay 1 extra mana or you draw a card. In multiplayer games, opponents often choose not to pay, which can let you draw many cards over the course of the game.",
-
-  "Cultivate":
-    "Cultivate is a ramp spell. You search your library for two basic lands: one goes onto the battlefield tapped, and the other goes into your hand. This both increases your mana for future turns and makes sure you keep hitting land drops.",
-
-  "Kodama’s Reach":
-    "Kodama’s Reach is basically Cultivate. You search for two basic lands: one enters the battlefield tapped, and the other goes into your hand. Commander decks often run both because they do the same strong job consistently.",
-
-  "Path to Exile":
-    "Path to Exile is a cheap removal spell that exiles a creature. The tradeoff is that the creature’s controller may search for a basic land and put it onto the battlefield tapped. Exiling is very strong, so giving them a land is often worth removing a big threat.",
-
-  Counterspell:
-    "Counterspell stops a spell from resolving. When you cast it, the spell you target is countered and goes to the graveyard instead of entering the battlefield or taking effect. This is a classic way to protect yourself from board wipes, combos, or big threats.",
-
-  "Cyclonic Rift":
-    "Cyclonic Rift returns nonland permanents to their owners’ hands. Normally it hits one permanent you don’t control, but if you pay the overload cost, it hits all nonland permanents your opponents control. In Commander, overloaded Rift often clears the board for a big winning swing.",
-
-  "Lightning Bolt":
-    "Lightning Bolt deals 3 damage to any target (a creature, player, or planeswalker). It’s simple but powerful: it can remove small creatures, finish off weakened creatures, or help close out a game.",
-
-  "Smothering Tithe":
-    "Smothering Tithe is a Treasure-making engine. Whenever an opponent draws a card, they must pay 2 mana or you create a Treasure token. Treasures can be sacrificed for mana, so this card can generate a huge mana advantage in multiplayer games.",
-
-  "Mystic Remora":
-    "Mystic Remora draws you cards when opponents cast noncreature spells unless they pay 4 mana. It has cumulative upkeep, meaning you must pay more and more mana each upkeep to keep it around. Many players use it early to draw a bunch of cards, then let it go when it gets too expensive.",
-
-  Brainstorm:
-    "Brainstorm lets you draw 3 cards, then put 2 cards from your hand back on top of your library. It’s best when you can shuffle your library afterward (like with a fetch land), so you don’t get stuck drawing the cards you put back.",
-
-  "Sensei’s Divining Top":
-    "Sensei’s Divining Top helps you control what you draw. You can look at the top three cards of your library and rearrange them, and you can also draw a card by putting Top on top of your library. It’s strong when you can generate extra mana or repeatedly shuffle your deck.",
-
-  "Wrath of God":
-    "Wrath of God is a board wipe. It destroys all creatures, and they can’t be regenerated. This resets the battlefield when someone is too far ahead or when you need time to stabilize.",
-
-  "Teferi’s Protection":
-    "Teferi’s Protection is a powerful defensive spell. Your life total can’t change and all your permanents phase out until your next turn, meaning they basically disappear and can’t be affected. This can save you from board wipes, huge attacks, or combo damage.",
-
-  "Doubling Season":
-    "Doubling Season doubles tokens you create and doubles counters placed on your permanents. This can supercharge token strategies and planeswalkers (because they enter with extra loyalty counters), but it’s important to remember it affects counters being placed, not counters being moved.",
-
-  "The One Ring":
-    "The One Ring protects you for a turn (you gain protection from everything until your next turn), and it draws cards over time by adding burden counters and drawing that many cards. You lose 1 life for each burden counter during your upkeep, so it’s strong card advantage but comes with a growing life cost.",
-
-  "Dockside Extortionist":
-    "Dockside Extortionist creates Treasure tokens based on how many artifacts and enchantments your opponents control. In Commander, that number can be huge, so Dockside often creates a big burst of mana that can enable explosive turns or combos.",
-};
-
-/* =========================
-   SYNERGIES (starter set)
-   ========================= */
-const SYNERGIES: Record<string, { name: string; reason: string }[]> = {
-  "Sol Ring": [
-    { name: "Arcane Signet", reason: "more fast mana to ramp early." },
-    { name: "Thran Dynamo", reason: "a bigger ramp follow-up once you’re ahead." },
-    { name: "Sensei’s Divining Top", reason: "extra mana helps you activate it repeatedly early." },
-  ],
-  "Arcane Signet": [
-    { name: "Sol Ring", reason: "fast mana helps you accelerate quickly." },
-    { name: "Command Tower", reason: "fixes colors and is a staple land in Commander." },
-    { name: "Fellwar Stone", reason: "often taps for your colors in multiplayer games." },
-  ],
-  "Rhystic Study": [
-    { name: "Smothering Tithe", reason: "both tax opponents and generate huge advantage." },
-    { name: "Mystic Remora", reason: "another early card-draw engine in similar decks." },
-    { name: "Counterspell", reason: "protect your draw engine from removal." },
-  ],
-};
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 
 type ScryfallCard = {
-  name?: string;
+  id: string;
+  name: string;
   mana_cost?: string;
   type_line?: string;
   oracle_text?: string;
-  legalities?: { commander?: string };
-  image_uris?: { normal?: string; small?: string };
-  card_faces?: Array<{ image_uris?: { normal?: string; small?: string } }>;
+  flavor_text?: string;
+  power?: string;
+  toughness?: string;
+  loyalty?: string;
+  colors?: string[];
+  color_identity?: string[];
+  keywords?: string[];
+  produced_mana?: string[];
+  cmc?: number;
+  rarity?: string;
+  set?: string;
+  set_name?: string;
+  image_uris?: {
+    normal?: string;
+    large?: string;
+    small?: string;
+    art_crop?: string;
+    border_crop?: string;
+    png?: string;
+  };
+  card_faces?: Array<{
+    name: string;
+    mana_cost?: string;
+    type_line?: string;
+    oracle_text?: string;
+    flavor_text?: string;
+    power?: string;
+    toughness?: string;
+    loyalty?: string;
+    image_uris?: {
+      normal?: string;
+      large?: string;
+      small?: string;
+      art_crop?: string;
+      border_crop?: string;
+      png?: string;
+    };
+  }>;
+  legalities?: Record<string, string>;
 };
 
-function useDebouncedValue<T>(value: T, delayMs: number) {
-  const [debounced, setDebounced] = useState(value);
+type Suggestion = {
+  id: string;
+  name: string;
+  image?: string | null;
+  type_line?: string;
+  mana_cost?: string;
+};
 
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(t);
-  }, [value, delayMs]);
-
-  return debounced;
+function cx(...classes: Array<string | false | undefined | null>) {
+  return classes.filter(Boolean).join(' ');
 }
 
-export default function Home() {
-  const [name, setName] = useState("");
+// ---- Manual explainers (~20 staples) ----
+// Keep these exactly how you like them; add more any time.
+const MANUAL_EXPLAINERS: Record<
+  string,
+  {
+    title: string;
+    short: string;
+    why: string[];
+    tips: string[];
+    gotchas?: string[];
+  }
+> = {
+  'Sol Ring': {
+    title: 'Sol Ring',
+    short: 'One of the strongest early-game mana rocks ever printed.',
+    why: [
+      'Turns 1 mana into 2 colorless (net +1) every turn.',
+      'Accelerates you into your commander and big plays much earlier.',
+      'Fits almost any Commander deck (unless you have a specific reason not to).',
+    ],
+    tips: [
+      'Best on turn 1 or 2; early ramp matters most.',
+      'If your deck is very color-hungry, pair it with colored rocks/lands.',
+    ],
+    gotchas: ['Makes you a target if you start too fast — consider your table politics.'],
+  },
+  'Command Tower': {
+    title: 'Command Tower',
+    short: 'Fixes colors in Commander: taps for any color in your commander’s identity.',
+    why: ['Perfect mana fixing in most Commander decks.', 'No real downside in Commander.'],
+    tips: ['Almost always an auto-include in multicolor Commander decks.'],
+  },
+  'Arcane Signet': {
+    title: 'Arcane Signet',
+    short: 'A 2-mana rock that taps for any color in your commander’s identity.',
+    why: ['Reliable color fixing + ramp.', 'Helps cast your commander on curve.'],
+    tips: ['Great keep in opening hands if you have lands to cast it.'],
+  },
+  'Swords to Plowshares': {
+    title: 'Swords to Plowshares',
+    short: 'One of the best single-target creature removals ever printed.',
+    why: ['Exiles (beats indestructible & death triggers).', 'Only 1 mana.'],
+    tips: ['Save it for the scariest creature, not the first creature.'],
+    gotchas: ['Opponent gains life — usually worth it.'],
+  },
+  'Path to Exile': {
+    title: 'Path to Exile',
+    short: 'Efficient exile removal that gives the opponent a basic land.',
+    why: ['Exiles for 1 mana.', 'Stops indestructible and recursion lines.'],
+    tips: ['Use on the biggest threat, or when the land won’t matter much.'],
+    gotchas: ['Ramp is real — be careful early game.'],
+  },
+  'Rhystic Study': {
+    title: 'Rhystic Study',
+    short: 'Tax effect that draws you cards when opponents don’t pay 1.',
+    why: ['Generates massive card advantage over a game.', 'Forces opponents into awkward choices.'],
+    tips: ['Say “Pay the 1?” consistently. Track triggers carefully.'],
+    gotchas: ['You will become the archenemy if you draw too much.'],
+  },
+  'Smothering Tithe': {
+    title: 'Smothering Tithe',
+    short: 'Creates Treasure when opponents draw unless they pay 2.',
+    why: ['Explosive mana advantage.', 'Treasures fix colors and enable big turns.'],
+    tips: ['Sequence your turns to convert Treasures into immediate advantage.'],
+    gotchas: ['Table will usually aim removal at it quickly.'],
+  },
+  'Cyclonic Rift': {
+    title: 'Cyclonic Rift',
+    short: 'Overloaded: bounces all nonlands you don’t control (one-sided reset).',
+    why: ['Massive tempo swing.', 'Breaks board stalls and opens lethal attacks.'],
+    tips: ['Often best cast on the end step before your turn.'],
+    gotchas: ['Doesn’t permanently answer threats; they can replay them if they survive.'],
+  },
+  'Demonic Tutor': {
+    title: 'Demonic Tutor',
+    short: 'Search your library for any card (best-in-class tutor).',
+    why: ['Finds answers or win conditions.', 'Increases consistency hugely.'],
+    tips: ['Tutor with a plan: “What am I doing the next 2 turns?”'],
+    gotchas: ['Tutors can make games repetitive; some tables dislike them.'],
+  },
+  'Cultivate': {
+    title: 'Cultivate',
+    short: 'Classic green ramp: one basic to battlefield tapped, one to hand.',
+    why: ['Fixes colors + ramps.', 'Smooths land drops for future turns.'],
+    tips: ['Pick basics that fix your next 2 turns of casting.'],
+  },
+  'Kodama’s Reach': {
+    title: 'Kodama’s Reach',
+    short: 'Functionally Cultivate #2.',
+    why: ['Redundancy for consistent ramp.'],
+    tips: ['Same play pattern as Cultivate — plan ahead for colors.'],
+  },
+  'Lightning Greaves': {
+    title: 'Lightning Greaves',
+    short: 'Gives haste + shroud for 0 equip (protects and enables).',
+    why: ['Protects key creatures/commanders.', 'Allows immediate attacks/activations.'],
+    tips: ['Move Greaves at the right moment: equip when you need protection.'],
+    gotchas: ['Shroud stops YOU from targeting your creature too.'],
+  },
+  'Swiftfoot Boots': {
+    title: 'Swiftfoot Boots',
+    short: 'Gives haste + hexproof; equip costs 1.',
+    why: ['Protection without shroud downside.', 'Still enables immediate value.'],
+    tips: ['If you need to target your own creature a lot, Boots > Greaves.'],
+  },
+  'Esper Sentinel': {
+    title: 'Esper Sentinel',
+    short: 'Early tax creature that draws cards when opponents cast noncreature spells.',
+    why: ['Great turn-1 play in white.', 'Punishes decks full of rocks/removal/draw.'],
+    tips: ['Buff its power to increase the tax.'],
+  },
+  'The One Ring': {
+    title: 'The One Ring',
+    short: 'Protection for a turn + scalable card draw (with a life-cost clock).',
+    why: ['Immediate safety and huge card advantage.', 'Fits many decks.'],
+    tips: ['Plan how you’ll remove/reset burden counters (bounce/sac/clone).'],
+    gotchas: ['Burden counters drain life — don’t get greedy if you’re under pressure.'],
+  },
+  'Fabled Passage': {
+    title: 'Fabled Passage',
+    short: 'Fetches a basic land; untaps it if you have 4+ lands.',
+    why: ['Fixes colors.', 'Shuffles for topdeck manipulation.'],
+    tips: ['Hold it if you care about landfall or want the untap.'],
+  },
+  'Evolving Wilds': {
+    title: 'Evolving Wilds',
+    short: 'Simple basic-land fetch; good budget fixing.',
+    why: ['Fixes colors on a budget.'],
+    tips: ['Use early to fix colors; it always enters tapped indirectly.'],
+  },
+  'Mystic Remora': {
+    title: 'Mystic Remora',
+    short: 'Early-game draw engine vs noncreature spells; upkeep tax grows.',
+    why: ['Punishes fast mana and early interaction.', 'Draws absurd cards early.'],
+    tips: ['Often correct to let it die after 1–2 upkeeps.'],
+  },
+  'Brainstorm': {
+    title: 'Brainstorm',
+    short: 'Draw 3, put 2 back — best with shuffle effects.',
+    why: ['Fixes hands and hides key cards.', 'Combos with fetchlands to “clean” the top.'],
+    tips: ['Try to pair with a shuffle (Fabled Passage, Evolving Wilds, etc.).'],
+    gotchas: ['Without shuffle/top manipulation, it can lock bad cards on top.'],
+  },
+};
+
+const MANUAL_KEYS = new Set(Object.keys(MANUAL_EXPLAINERS).map((k) => k.toLowerCase().trim()));
+
+// ---- Small helpers ----
+function normalizeName(n: string) {
+  return n.toLowerCase().trim();
+}
+
+function getBestCardImage(card: ScryfallCard | null): string | null {
+  if (!card) return null;
+  // Double-faced / split cards often store images on card_faces.
+  if (card.image_uris?.normal) return card.image_uris.normal;
+  if (card.card_faces?.[0]?.image_uris?.normal) return card.card_faces[0].image_uris.normal;
+  return null;
+}
+
+function getOracleText(card: ScryfallCard | null): string {
+  if (!card) return '';
+  if (card.oracle_text) return card.oracle_text;
+  if (card.card_faces?.length) {
+    return card.card_faces
+      .map((f) => `${f.name}${f.oracle_text ? `\n${f.oracle_text}` : ''}`)
+      .join('\n\n—\n\n');
+  }
+  return '';
+}
+
+function getTypeLine(card: ScryfallCard | null): string {
+  if (!card) return '';
+  if (card.type_line) return card.type_line;
+  if (card.card_faces?.length) {
+    return card.card_faces.map((f) => f.type_line).filter(Boolean).join(' // ');
+  }
+  return '';
+}
+
+function getManaCost(card: ScryfallCard | null): string {
+  if (!card) return '';
+  if (card.mana_cost) return card.mana_cost;
+  if (card.card_faces?.length) {
+    return card.card_faces.map((f) => f.mana_cost).filter(Boolean).join(' // ');
+  }
+  return '';
+}
+
+function buildContextTags(card: ScryfallCard | null): string[] {
+  if (!card) return [];
+  const t = getTypeLine(card).toLowerCase();
+  const o = getOracleText(card).toLowerCase();
+
+  const tags: string[] = [];
+  if (t.includes('legendary') && t.includes('creature')) tags.push('legendary-creature');
+  if (t.includes('planeswalker')) tags.push('planeswalker');
+  if (t.includes('artifact')) tags.push('artifact');
+  if (t.includes('enchantment')) tags.push('enchantment');
+  if (t.includes('instant')) tags.push('instant');
+  if (t.includes('sorcery')) tags.push('sorcery');
+
+  if (o.includes('draw a card') || o.includes('draw two') || o.includes('cards')) tags.push('card-draw');
+  if (o.includes('treasure')) tags.push('treasure');
+  if (o.includes('create') && (o.includes('token') || o.includes('tokens'))) tags.push('tokens');
+  if (o.includes('counter target') || o.includes('counterspell')) tags.push('countermagic');
+  if (o.includes('destroy') || o.includes('exile')) tags.push('removal');
+  if (o.includes('each opponent')) tags.push('each-opponent');
+  if (o.includes('whenever you cast')) tags.push('cast-triggers');
+  if (o.includes('enters the battlefield')) tags.push('etb');
+  if (o.includes('sacrifice')) tags.push('sacrifice');
+  if (o.includes('graveyard')) tags.push('graveyard');
+
+  return Array.from(new Set(tags));
+}
+
+async function safeJson(res: Response) {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+export default function Page() {
+  // Search / suggestions
+  const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  // Selected card
+  const [selectedName, setSelectedName] = useState<string>('');
   const [card, setCard] = useState<ScryfallCard | null>(null);
-  const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingCard, setIsLoadingCard] = useState(false);
 
-  // AI explanation fallback
-  const [aiExplanation, setAiExplanation] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
-  const aiCache = useRef(new Map<string, string>());
+  // Explanations
+  const [activeTab, setActiveTab] = useState<'explain' | 'synergies'>('explain');
+  const [explanation, setExplanation] = useState<string>('');
+  const [synergies, setSynergies] = useState<string>('');
+  const [isLoadingExplain, setIsLoadingExplain] = useState(false);
+  const [isLoadingSynergy, setIsLoadingSynergy] = useState(false);
+  const [error, setError] = useState<string>('');
 
-  // Autocomplete UI state
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
-  const suggestionsRef = useRef<HTMLDivElement | null>(null);
+  // UX toggles
+  const [preferManualFirst, setPreferManualFirst] = useState(true);
+  const [autoFetchAI, setAutoFetchAI] = useState(true);
+
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Suggestions w/ images + cache
-  const [suggestionCards, setSuggestionCards] = useState<
-    { name: string; img?: string }[]
-  >([]);
-  const suggestionCache = useRef(new Map<string, string | undefined>());
-
-  const debouncedQuery = useDebouncedValue(name, 180);
-
-  async function fetchAIExplanation(c: ScryfallCard) {
-    const key = c?.name?.trim();
-    if (!key) return;
-
-    // If you have a manual explainer, do not call AI
-    if (EXPLAINERS[key]) {
-      setAiExplanation("");
-      return;
+  const manual = useMemo(() => {
+    const key = normalizeName(selectedName || query);
+    // Exact match on manual keys:
+    for (const name of Object.keys(MANUAL_EXPLAINERS)) {
+      if (normalizeName(name) === key) return MANUAL_EXPLAINERS[name];
     }
+    return null;
+  }, [selectedName, query]);
 
-    const cached = aiCache.current.get(key);
-    if (cached) {
-      setAiExplanation(cached);
-      return;
-    }
+  const manualMatchIsExact = useMemo(() => {
+    if (!selectedName) return false;
+    return MANUAL_KEYS.has(normalizeName(selectedName));
+  }, [selectedName]);
 
-    setAiLoading(true);
-    setAiExplanation("");
-
-    try {
-      const res = await fetch("/api/explain", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: c.name,
-          mana_cost: c.mana_cost,
-          type_line: c.type_line,
-          oracle_text: c.oracle_text,
-        }),
-      });
-
-      const data = await res.json();
-      const text = (data?.explanation ?? "").toString().trim();
-
-      if (text) {
-        aiCache.current.set(key, text);
-        setAiExplanation(text);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setAiLoading(false);
-    }
-  }
-
-  async function fetchCardByExactName(cardName: string) {
-    setError("");
-    setCard(null);
-    setAiExplanation("");
-
-    const cleaned = cardName.trim();
-    if (!cleaned) {
-      setError("Type a card name first (example: Sol Ring).");
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const res = await fetch(
-        `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cleaned)}`
-      );
-
-      if (!res.ok) throw new Error("Card not found");
-      const data: ScryfallCard = await res.json();
-
-      setCard(data);
-      fetchAIExplanation(data);
-
-      setShowSuggestions(false);
-      setActiveIndex(-1);
-    } catch {
-      setError("Card not found. Check spelling and try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function fetchCard() {
-    await fetchCardByExactName(name);
-  }
-
-  async function fetchCardByName(cardName: string) {
-    setName(cardName);
-    setShowSuggestions(false);
-    setActiveIndex(-1);
-    await fetchCardByExactName(cardName);
-  }
-
-  // Autocomplete: fetch suggestions + small images for top results
+  // Close dropdown when clicking outside
   useEffect(() => {
-    const q = debouncedQuery.trim();
-    if (q.length < 2) {
-      setSuggestions([]);
-      setSuggestionCards([]);
-      setShowSuggestions(false);
-      setActiveIndex(-1);
-      return;
-    }
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const res = await fetch(
-          `https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(q)}`
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        if (cancelled) return;
-
-        const list: string[] = Array.isArray(data?.data) ? data.data : [];
-        const top = list.slice(0, 8);
-
-        setSuggestions(top);
-        setShowSuggestions(true);
-        setActiveIndex(-1);
-
-        // fetch small images for up to 6 suggestions (keeps it fast)
-        const withImgs = await Promise.all(
-          top.slice(0, 6).map(async (nm) => {
-            if (suggestionCache.current.has(nm)) {
-              return { name: nm, img: suggestionCache.current.get(nm) };
-            }
-
-            try {
-              const r = await fetch(
-                `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(nm)}`
-              );
-              if (!r.ok) {
-                suggestionCache.current.set(nm, undefined);
-                return { name: nm, img: undefined };
-              }
-              const c: ScryfallCard = await r.json();
-              const img =
-                c?.image_uris?.small ||
-                c?.card_faces?.[0]?.image_uris?.small ||
-                undefined;
-
-              suggestionCache.current.set(nm, img);
-              return { name: nm, img };
-            } catch {
-              suggestionCache.current.set(nm, undefined);
-              return { name: nm, img: undefined };
-            }
-          })
-        );
-
-        if (!cancelled) setSuggestionCards(withImgs);
-      } catch {
-        // ignore
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedQuery]);
-
-  // Close suggestions on outside click
-  useEffect(() => {
-    function onDocClick(e: MouseEvent) {
-      const target = e.target as Node;
-      if (
-        suggestionsRef.current &&
-        !suggestionsRef.current.contains(target) &&
-        inputRef.current &&
-        !inputRef.current.contains(target)
-      ) {
-        setShowSuggestions(false);
-        setActiveIndex(-1);
+    function onDocMouseDown(e: MouseEvent) {
+      if (!dropdownRef.current) return;
+      if (!dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
       }
     }
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, []);
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Escape") {
-      setShowSuggestions(false);
-      setActiveIndex(-1);
+  // Debounced suggestion fetch
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setSuggestions([]);
+      setShowDropdown(false);
       return;
     }
 
-    if (e.key === "ArrowDown") {
-      if (!showSuggestions) setShowSuggestions(true);
-      setActiveIndex((prev) => Math.min(prev + 1, suggestions.length - 1));
-      return;
-    }
+    setIsSuggesting(true);
+    const handle = setTimeout(async () => {
+      try {
+        // Scryfall autocomplete gives just names
+        const acRes = await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(q)}`);
+        const acJson = await safeJson(acRes);
 
-    if (e.key === "ArrowUp") {
-      setActiveIndex((prev) => Math.max(prev - 1, -1));
-      return;
-    }
+        const names: string[] = Array.isArray(acJson?.data) ? acJson.data.slice(0, 8) : [];
 
-    if (e.key === "Enter") {
-      const pick =
-        (suggestionCards[activeIndex]?.name ?? suggestions[activeIndex]) || "";
+        // Fetch minimal card info for each name (for small images)
+        const cards: Suggestion[] = [];
+        for (const name of names) {
+          try {
+            const namedRes = await fetch(
+              `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`
+            );
+            const namedJson = (await safeJson(namedRes)) as ScryfallCard | null;
 
-      if (showSuggestions && activeIndex >= 0 && pick) {
-        e.preventDefault();
-        fetchCardByName(pick);
+            cards.push({
+              id: namedJson?.id || name,
+              name,
+              image: namedJson ? getBestCardImage(namedJson) : null,
+              type_line: namedJson?.type_line || '',
+              mana_cost: namedJson?.mana_cost || '',
+            });
+          } catch {
+            cards.push({ id: name, name, image: null });
+          }
+        }
+
+        setSuggestions(cards);
+        setShowDropdown(true);
+      } catch {
+        // Just silently fail suggestions; don't break UI
+        setSuggestions([]);
+      } finally {
+        setIsSuggesting(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(handle);
+  }, [query]);
+
+  async function loadCardByName(name: string) {
+    const n = name.trim();
+    if (!n) return;
+
+    setError('');
+    setIsLoadingCard(true);
+    setCard(null);
+    setExplanation('');
+    setSynergies('');
+    setActiveTab('explain');
+
+    try {
+      const res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(n)}`);
+      const json = (await safeJson(res)) as ScryfallCard | null;
+
+      if (!res.ok || !json?.name) {
+        setError('Could not find that card on Scryfall. Check spelling and try again.');
+        setCard(null);
         return;
       }
 
-      fetchCard();
+      setCard(json);
+    } catch {
+      setError('Network error while loading card data. Please try again.');
+      setCard(null);
+    } finally {
+      setIsLoadingCard(false);
     }
   }
 
-  const bestFormat = useMemo(() => {
-    if (!card) return "";
-    return card.legalities?.commander === "legal"
-      ? "Commander (EDH)"
-      : "Not legal in Commander";
+  async function fetchAIExplanation(mode: 'explain' | 'synergies') {
+    if (!card) return;
+
+    const payload = {
+      mode, // <-- new: lets your /api/explain route choose a better prompt
+      card: {
+        name: card.name,
+        mana_cost: getManaCost(card),
+        type_line: getTypeLine(card),
+        oracle_text: getOracleText(card),
+        keywords: card.keywords || [],
+        colors: card.colors || [],
+        color_identity: card.color_identity || [],
+        produced_mana: card.produced_mana || [],
+        cmc: card.cmc ?? null,
+        rarity: card.rarity ?? null,
+        set: card.set ?? null,
+        set_name: card.set_name ?? null,
+        tags: buildContextTags(card),
+      },
+      // you can also send user preferences so the API can tailor the tone
+      prefs: {
+        audience: 'beginner',
+        format: 'bulleted-with-sections',
+        concise: false,
+        commanderFocus: true,
+      },
+    };
+
+    if (mode === 'explain') {
+      setIsLoadingExplain(true);
+      setExplanation('');
+    } else {
+      setIsLoadingSynergy(true);
+      setSynergies('');
+    }
+    setError('');
+
+    try {
+      const res = await fetch('/api/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await safeJson(res);
+
+      if (!res.ok) {
+        const msg =
+          json?.error ||
+          json?.message ||
+          'AI request failed. If this persists, your /api/explain route may be misconfigured.';
+        setError(String(msg));
+        return;
+      }
+
+      // Backwards compatible:
+      // - old route: { explanation: "..." }
+      // - newer route: { explanation: "...", synergies: "..." }
+      const text =
+        mode === 'explain'
+          ? (json?.explanation as string) || (json?.text as string) || ''
+          : (json?.synergies as string) || (json?.explanation as string) || (json?.text as string) || '';
+
+      if (!text) {
+        setError('AI returned an empty response. Check your /api/explain output format.');
+        return;
+      }
+
+      if (mode === 'explain') setExplanation(text);
+      else setSynergies(text);
+    } catch {
+      setError('Network error while calling /api/explain. Please try again.');
+    } finally {
+      if (mode === 'explain') setIsLoadingExplain(false);
+      else setIsLoadingSynergy(false);
+    }
+  }
+
+  // Auto-fetch AI after card loads (unless manual-only preferred)
+  useEffect(() => {
+    if (!card) return;
+
+    // If we have a manual explainer and user prefers manual first, we can optionally skip auto AI.
+    if (preferManualFirst && manualMatchIsExact) {
+      // Only auto-fetch AI if the user enabled it
+      if (autoFetchAI) fetchAIExplanation('explain');
+      return;
+    }
+
+    if (autoFetchAI) fetchAIExplanation('explain');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card]);
 
-  const dropdownItems = useMemo(() => {
-    const imgMap = new Map(suggestionCards.map((x) => [x.name, x.img]));
-    return suggestions.slice(0, 8).map((n) => ({
-      name: n,
-      img: imgMap.get(n),
-    }));
-  }, [suggestionCards, suggestions]);
+  function onPickSuggestion(name: string) {
+    setSelectedName(name);
+    setQuery(name);
+    setShowDropdown(false);
+    loadCardByName(name);
+  }
 
-  const mainImage =
-    card?.image_uris?.normal || card?.card_faces?.[0]?.image_uris?.normal;
-  const explanationText =
-    (card?.name?.trim() && EXPLAINERS[card.name.trim()]) ||
-    (aiLoading ? "Generating a beginner-friendly explanation..." : aiExplanation) ||
-    "No beginner explanation yet.";
+  async function onSearchSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const n = query.trim();
+    if (!n) return;
+    setSelectedName(n);
+    setShowDropdown(false);
+    await loadCardByName(n);
+  }
+
+  const cardImage = useMemo(() => getBestCardImage(card), [card]);
+  const oracleText = useMemo(() => getOracleText(card), [card]);
 
   return (
-    <main style={{ padding: 24, fontFamily: "sans-serif", maxWidth: 1000 }}>
-      <h1 style={{ fontSize: 44, marginBottom: 8, color: "white" }}>
-        Explain My Card
-      </h1>
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        {/* Header */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Explain My Card</h1>
+            <p className="text-sm text-zinc-400">
+              Search any Magic card. Get a clear explanation + beginner-friendly synergies.
+            </p>
+          </div>
 
-      <p style={{ marginTop: 0, lineHeight: 1.4, color: "white", maxWidth: 900 }}>
-        Type a Magic: The Gathering card name to get a beginner-friendly explanation,
-        suggested synergies, and format guidance.
-      </p>
+          <div className="flex flex-wrap gap-2 text-xs text-zinc-300">
+            <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2">
+              <input
+                type="checkbox"
+                className="accent-zinc-200"
+                checked={preferManualFirst}
+                onChange={(e) => setPreferManualFirst(e.target.checked)}
+              />
+              Prefer manual explainer first
+            </label>
 
-      <div style={{ position: "relative", display: "inline-block" }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input
-            ref={inputRef}
-            placeholder="e.g. Sol Ring"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onFocus={() => {
-              if (dropdownItems.length > 0) setShowSuggestions(true);
-            }}
-            style={{
-              padding: 10,
-              width: 420,
-              borderRadius: 10,
-              border: "1px solid #333",
-              background: "#0b0b0b",
-              color: "white",
-              outline: "none",
-            }}
-          />
-
-          <button
-            onClick={fetchCard}
-            disabled={isLoading}
-            style={{
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "1px solid #555",
-              cursor: isLoading ? "not-allowed" : "pointer",
-              fontWeight: 700,
-              background: "#111",
-              color: "white",
-            }}
-          >
-            {isLoading ? "Searching..." : "Explain"}
-          </button>
+            <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2">
+              <input
+                type="checkbox"
+                className="accent-zinc-200"
+                checked={autoFetchAI}
+                onChange={(e) => setAutoFetchAI(e.target.checked)}
+              />
+              Auto-fetch AI
+            </label>
+          </div>
         </div>
 
-        {showSuggestions && dropdownItems.length > 0 && (
-          <div
-            ref={suggestionsRef}
-            style={{
-              position: "absolute",
-              top: 46,
-              left: 0,
-              width: 420,
-              background: "#111",
-              border: "1px solid #333",
-              borderRadius: 10,
-              boxShadow: "0 8px 20px rgba(0,0,0,0.6)",
-              zIndex: 20,
-              overflow: "hidden",
-            }}
-          >
-            {dropdownItems.map((item, i) => (
-              <div
-                key={item.name}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  fetchCardByName(item.name);
-                }}
-                onMouseEnter={() => setActiveIndex(i)}
-                style={{
-                  padding: "10px 12px",
-                  cursor: "pointer",
-                  background: i === activeIndex ? "#222" : "#111",
-                  color: "#f5f5f5",
-                  borderBottom:
-                    i === dropdownItems.length - 1 ? "none" : "1px solid #333",
-                }}
+        {/* Search */}
+        <div className="mt-6" ref={dropdownRef}>
+          <form onSubmit={onSearchSubmit} className="relative">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  ref={inputRef}
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setShowDropdown(true);
+                  }}
+                  onFocus={() => {
+                    if (suggestions.length) setShowDropdown(true);
+                  }}
+                  placeholder="Type a card name… (e.g., Sol Ring, Rhystic Study, Lightning Greaves)"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-500 shadow-sm outline-none focus:border-zinc-600"
+                />
+
+                {/* Dropdown */}
+                {showDropdown && (suggestions.length > 0 || isSuggesting) && (
+                  <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-xl">
+                    {isSuggesting && (
+                      <div className="px-4 py-3 text-sm text-zinc-400">Searching…</div>
+                    )}
+
+                    {!isSuggesting &&
+                      suggestions.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => onPickSuggestion(s.name)}
+                          className="flex w-full items-center gap-3 border-b border-zinc-800 px-4 py-3 text-left hover:bg-zinc-800/50"
+                        >
+                          <div className="h-10 w-10 overflow-hidden rounded-lg bg-zinc-800">
+                            {s.image ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={s.image} alt={s.name} className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-xs text-zinc-400">
+                                —
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-medium text-zinc-100">{s.name}</div>
+                            <div className="truncate text-xs text-zinc-400">
+                              {s.mana_cost ? `${s.mana_cost} · ` : ''}
+                              {s.type_line || 'Card'}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                className="rounded-xl border border-zinc-800 bg-zinc-100 px-4 py-3 text-sm font-semibold text-zinc-900 hover:bg-white"
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  {item.img ? (
-                    <img
-                      src={item.img}
-                      alt=""
-                      width={28}
-                      height={40}
-                      style={{ borderRadius: 4, objectFit: "cover" }}
-                    />
+                Search
+              </button>
+            </div>
+          </form>
+
+          <div className="mt-2 text-xs text-zinc-500">
+            Tip: click a dropdown result to load it instantly (best accuracy).
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
+          {/* Left: Card */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
+            <div className="text-sm font-semibold text-zinc-200">Card</div>
+
+            <div className="mt-3">
+              {isLoadingCard ? (
+                <div className="space-y-3">
+                  <div className="h-6 w-2/3 rounded bg-zinc-800" />
+                  <div className="h-48 w-full rounded-xl bg-zinc-800" />
+                  <div className="h-4 w-full rounded bg-zinc-800" />
+                  <div className="h-4 w-5/6 rounded bg-zinc-800" />
+                </div>
+              ) : card ? (
+                <div className="space-y-4">
+                  <div>
+                    <div className="text-lg font-semibold">{card.name}</div>
+                    <div className="mt-1 text-xs text-zinc-400">
+                      {getManaCost(card) ? <span className="mr-2">{getManaCost(card)}</span> : null}
+                      {getTypeLine(card)}
+                    </div>
+                  </div>
+
+                  {cardImage ? (
+                    <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={cardImage} alt={card.name} className="h-auto w-full object-cover" />
+                    </div>
                   ) : (
-                    <div
-                      style={{
-                        width: 28,
-                        height: 40,
-                        borderRadius: 4,
-                        background: "#222",
-                        border: "1px solid #333",
-                      }}
-                    />
+                    <div className="flex h-64 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-sm text-zinc-500">
+                      No image available
+                    </div>
                   )}
-                  <span style={{ fontWeight: 650 }}>{item.name}</span>
+
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                    <div className="text-xs font-semibold text-zinc-300">Oracle text</div>
+                    <pre className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">
+                      {oracleText || 'No oracle text found.'}
+                    </pre>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+                  Search for a card to see it here.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right: Explanation */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-semibold text-zinc-200">Explanation</div>
+                <div className="text-xs text-zinc-500">
+                  Manual explainer for staples + AI fallback for everything else.
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
 
-      {error && (
-        <p style={{ color: "#ff6b6b", marginTop: 12, fontWeight: 700 }}>
-          {error}
-        </p>
-      )}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('explain')}
+                  className={cx(
+                    'rounded-xl border px-3 py-2 text-xs font-semibold',
+                    activeTab === 'explain'
+                      ? 'border-zinc-200 bg-zinc-100 text-zinc-900'
+                      : 'border-zinc-800 bg-zinc-950 text-zinc-200 hover:bg-zinc-900'
+                  )}
+                >
+                  Explain
+                </button>
 
-      {card && (
-        <div style={{ marginTop: 28, display: "flex", gap: 22, alignItems: "flex-start" }}>
-          <div>
-            {mainImage ? (
-              <img src={mainImage} width={280} alt={card.name || "Card"} />
-            ) : (
-              <div
-                style={{
-                  width: 280,
-                  height: 390,
-                  border: "1px solid #333",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 10,
-                  color: "white",
-                  background: "#111",
-                }}
-              >
-                No image available
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('synergies')}
+                  className={cx(
+                    'rounded-xl border px-3 py-2 text-xs font-semibold',
+                    activeTab === 'synergies'
+                      ? 'border-zinc-200 bg-zinc-100 text-zinc-900'
+                      : 'border-zinc-800 bg-zinc-950 text-zinc-200 hover:bg-zinc-900'
+                  )}
+                  disabled={!card}
+                  title={!card ? 'Search a card first' : 'Show synergies'}
+                >
+                  Synergies
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => card && fetchAIExplanation('explain')}
+                  disabled={!card || isLoadingExplain}
+                  className={cx(
+                    'rounded-xl border px-3 py-2 text-xs font-semibold',
+                    !card || isLoadingExplain
+                      ? 'cursor-not-allowed border-zinc-800 bg-zinc-950 text-zinc-500'
+                      : 'border-zinc-800 bg-zinc-950 text-zinc-200 hover:bg-zinc-900'
+                  )}
+                  title={!card ? 'Search a card first' : 'Re-run AI explanation'}
+                >
+                  {isLoadingExplain ? 'Refreshing…' : 'Refresh AI'}
+                </button>
               </div>
-            )}
-          </div>
+            </div>
 
-          <div style={{ flex: 1, color: "white" }}>
-            <h2 style={{ marginTop: 0, marginBottom: 10 }}>{card.name}</h2>
+            {/* Error */}
+            {error ? (
+              <div className="mt-4 rounded-xl border border-red-900/60 bg-red-950/40 p-3 text-sm text-red-200">
+                {error}
+              </div>
+            ) : null}
 
-            <p style={{ marginBottom: 6 }}>
-              <strong>Mana cost:</strong> {card.mana_cost || "N/A"}
-            </p>
+            {/* Content */}
+            <div className="mt-4 space-y-4">
+              {/* Manual explainer (if exact match + preferManualFirst) */}
+              {card && manual && (preferManualFirst || !explanation) && (
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-zinc-100">Manual explainer</div>
+                      <div className="mt-1 text-xs text-zinc-500">{manual.title}</div>
+                    </div>
 
-            <p style={{ marginBottom: 6 }}>
-              <strong>Type line:</strong> {card.type_line || "N/A"}
-            </p>
+                    <div className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                      Staples library
+                    </div>
+                  </div>
 
-            <p style={{ marginBottom: 6 }}>
-              <strong>Rules text:</strong>
-            </p>
-            <p style={{ whiteSpace: "pre-wrap", marginTop: 0 }}>
-              {card.oracle_text || "N/A"}
-            </p>
+                  <div className="mt-3 text-sm text-zinc-200">{manual.short}</div>
 
-            <p style={{ marginTop: 16, marginBottom: 6 }}>
-              <strong>Beginner explanation:</strong>
-            </p>
-            <p style={{ whiteSpace: "pre-wrap", marginTop: 0 }}>
-              {explanationText}
-            </p>
+                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+                      <div className="text-xs font-semibold text-zinc-200">Why people play it</div>
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-200">
+                        {manual.why.map((x, i) => (
+                          <li key={i}>{x}</li>
+                        ))}
+                      </ul>
+                    </div>
 
-            <p style={{ marginTop: 16, marginBottom: 6 }}>
-              <strong>Best format:</strong> {bestFormat}
-            </p>
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+                      <div className="text-xs font-semibold text-zinc-200">Tips</div>
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-200">
+                        {manual.tips.map((x, i) => (
+                          <li key={i}>{x}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
 
-            <p style={{ marginTop: 16, marginBottom: 6 }}>
-              <strong>Synergy ideas (click to load):</strong>
-            </p>
-
-            <ul style={{ marginTop: 6, paddingLeft: 18 }}>
-              {(SYNERGIES[card.name || ""] ?? []).length > 0 ? (
-                (SYNERGIES[card.name || ""] ?? []).map((item, i) => (
-                  <li key={i} style={{ marginBottom: 8 }}>
-                    <button
-                      onClick={() => fetchCardByName(item.name)}
-                      style={{
-                        padding: 0,
-                        border: "none",
-                        background: "none",
-                        color: "#7db7ff",
-                        textDecoration: "underline",
-                        cursor: "pointer",
-                        fontWeight: 750,
-                      }}
-                    >
-                      {item.name}
-                    </button>
-                    <span> — {item.reason}</span>
-                  </li>
-                ))
-              ) : (
-                <li>No synergy data yet.</li>
+                  {manual.gotchas?.length ? (
+                    <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+                      <div className="text-xs font-semibold text-zinc-200">Gotchas</div>
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-200">
+                        {manual.gotchas.map((x, i) => (
+                          <li key={i}>{x}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
               )}
-            </ul>
+
+              {/* Tabs */}
+              {activeTab === 'explain' && (
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold text-zinc-100">AI explanation</div>
+                    <div className="text-xs text-zinc-500">
+                      {card ? 'Uses card rules text + context tags' : 'Search a card to begin'}
+                    </div>
+                  </div>
+
+                  {!card ? (
+                    <div className="mt-3 text-sm text-zinc-400">Search a card to generate an explanation.</div>
+                  ) : isLoadingExplain ? (
+                    <div className="mt-3 space-y-2">
+                      <div className="h-4 w-5/6 rounded bg-zinc-800" />
+                      <div className="h-4 w-11/12 rounded bg-zinc-800" />
+                      <div className="h-4 w-2/3 rounded bg-zinc-800" />
+                      <div className="h-4 w-3/4 rounded bg-zinc-800" />
+                    </div>
+                  ) : explanation ? (
+                    <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
+                      {explanation}
+                    </pre>
+                  ) : (
+                    <div className="mt-3 text-sm text-zinc-400">
+                      No AI explanation yet. Click <span className="font-semibold text-zinc-200">Refresh AI</span>.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'synergies' && (
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-zinc-100">Synergies & combos</div>
+                      <div className="text-xs text-zinc-500">
+                        Beginner-friendly ideas: themes, pairings, and common lines.
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => card && fetchAIExplanation('synergies')}
+                      disabled={!card || isLoadingSynergy}
+                      className={cx(
+                        'rounded-xl border px-3 py-2 text-xs font-semibold',
+                        !card || isLoadingSynergy
+                          ? 'cursor-not-allowed border-zinc-800 bg-zinc-900/40 text-zinc-500'
+                          : 'border-zinc-800 bg-zinc-900 text-zinc-100 hover:bg-zinc-800/60'
+                      )}
+                    >
+                      {isLoadingSynergy ? 'Finding synergies…' : 'Generate synergies'}
+                    </button>
+                  </div>
+
+                  {!card ? (
+                    <div className="mt-3 text-sm text-zinc-400">Search a card first.</div>
+                  ) : isLoadingSynergy ? (
+                    <div className="mt-3 space-y-2">
+                      <div className="h-4 w-3/4 rounded bg-zinc-800" />
+                      <div className="h-4 w-11/12 rounded bg-zinc-800" />
+                      <div className="h-4 w-5/6 rounded bg-zinc-800" />
+                      <div className="h-4 w-2/3 rounded bg-zinc-800" />
+                    </div>
+                  ) : synergies ? (
+                    <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
+                      {synergies}
+                    </pre>
+                  ) : (
+                    <div className="mt-3 text-sm text-zinc-400">
+                      Click <span className="font-semibold text-zinc-200">Generate synergies</span> to get pairing ideas.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer hint */}
+            <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-500">
+              If a card has a manual explainer, you’ll see it here. AI is used for everything else — or to expand detail.
+            </div>
           </div>
         </div>
-      )}
-    </main>
+      </div>
+    </div>
   );
 }
