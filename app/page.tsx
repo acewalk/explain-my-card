@@ -264,8 +264,18 @@ type GlossaryItem = {
 };
 
 const GLOSSARY: GlossaryItem[] = [
-  { term: 'ETB', meaning: 'Enters the Battlefield', details: 'Triggered abilities that happen when a permanent enters the battlefield.', tags: ['trigger', 'battlefield'] },
-  { term: 'LTB', meaning: 'Leaves the Battlefield', details: 'Triggered abilities that happen when a permanent leaves the battlefield (dies, exiled, bounced, etc.).', tags: ['trigger', 'battlefield'] },
+  {
+    term: 'ETB',
+    meaning: 'Enters the Battlefield',
+    details: 'Triggered abilities that happen when a permanent enters the battlefield.',
+    tags: ['trigger', 'battlefield'],
+  },
+  {
+    term: 'LTB',
+    meaning: 'Leaves the Battlefield',
+    details: 'Triggered abilities that happen when a permanent leaves the battlefield (dies, exiled, bounced, etc.).',
+    tags: ['trigger', 'battlefield'],
+  },
   { term: 'Dies', meaning: 'Goes from battlefield to graveyard', details: '“Dies” specifically means it went to a graveyard from the battlefield.', tags: ['rules'] },
   { term: 'CMC', meaning: 'Converted Mana Cost (older term)', details: 'Modern rules usually say “Mana Value (MV)”. They mean the same thing.', tags: ['mana'] },
   { term: 'MV', meaning: 'Mana Value', details: 'A number representing the total mana cost (ignores color). Example: {2}{U} has MV 3.', tags: ['mana'] },
@@ -290,7 +300,6 @@ const GLOSSARY: GlossaryItem[] = [
   { term: 'Aristocrats', meaning: 'Sacrifice-for-value strategy', details: 'Uses sacrifice outlets + death triggers to drain life or gain value.', tags: ['strategy'] },
   { term: 'Go wide', meaning: 'Many creatures', details: 'Win by building lots of small creatures/tokens and buffing them.', tags: ['strategy'] },
   { term: 'Go tall', meaning: 'One huge threat', details: 'Win by building one creature very large (auras, counters, equipment).', tags: ['strategy'] },
-  { term: 'Politics', meaning: 'Multiplayer negotiation', details: 'Commander often involves deals, threats, and targeting decisions.', tags: ['commander'] },
   { term: 'Commander tax', meaning: 'Extra cost to recast commander', details: 'Each time you cast your commander from the command zone, it costs {2} more for each previous time.', tags: ['commander'] },
   { term: 'Stack', meaning: 'Where spells/abilities wait to resolve', details: 'Players can respond while things are on the stack (instants/abilities).', tags: ['rules'] },
   { term: 'Priority', meaning: 'Who can act right now', details: 'Only a player with priority can cast a spell or activate most abilities.', tags: ['rules'] },
@@ -650,4 +659,616 @@ export default function Page() {
   const [card, setCard] = useState<ScryfallCard | null>(null);
   const [isLoadingCard, setIsLoadingCard] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<'explain' | 'synergies' | 'glossary'>('exp
+  const [activeTab, setActiveTab] = useState<'explain' | 'synergies' | 'glossary'>('explain');
+
+  const [standardExplanation, setStandardExplanation] = useState<string>('');
+  const [standardSynergies, setStandardSynergies] = useState<string>('');
+  const [aiExplanation, setAiExplanation] = useState<string>('');
+  const [aiSynergies, setAiSynergies] = useState<string>('');
+
+  const [isLoadingExplain, setIsLoadingExplain] = useState(false);
+  const [isLoadingSynergy, setIsLoadingSynergy] = useState(false);
+
+  const [notice, setNotice] = useState<string>('');
+
+  const [preferManualFirst, setPreferManualFirst] = useState(true);
+  const [autoFetchAI, setAutoFetchAI] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(false);
+
+  const [openTooltipKey, setOpenTooltipKey] = useState<string | null>(null);
+
+  const [glossaryQuery, setGlossaryQuery] = useState('');
+
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  const manual = useMemo(() => {
+    const key = normalizeName(selectedName || query);
+    for (const name of Object.keys(MANUAL_EXPLAINERS)) {
+      if (normalizeName(name) === key) return MANUAL_EXPLAINERS[name];
+    }
+    return null;
+  }, [selectedName, query]);
+
+  const manualMatchIsExact = useMemo(() => {
+    if (!selectedName) return false;
+    return MANUAL_KEYS.has(normalizeName(selectedName));
+  }, [selectedName]);
+
+  useEffect(() => {
+    function onDocMouseDown(e: MouseEvent) {
+      if (dropdownRef.current && dropdownRef.current.contains(e.target as Node)) return;
+      setShowDropdown(false);
+      setOpenTooltipKey(null);
+    }
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, []);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setSuggestions([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    setIsSuggesting(true);
+    const handle = setTimeout(async () => {
+      try {
+        const acRes = await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(q)}`);
+        const acJson = await safeJson(acRes);
+        const names: string[] = Array.isArray(acJson?.data) ? acJson.data.slice(0, 8) : [];
+
+        const cards: Suggestion[] = [];
+        for (const name of names) {
+          try {
+            const namedRes = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
+            const namedJson = (await safeJson(namedRes)) as ScryfallCard | null;
+
+            cards.push({
+              id: namedJson?.id || name,
+              name,
+              image: namedJson ? getBestCardImage(namedJson) : null,
+              type_line: namedJson?.type_line || '',
+              mana_cost: namedJson?.mana_cost || '',
+            });
+          } catch {
+            cards.push({ id: name, name, image: null });
+          }
+        }
+
+        setSuggestions(cards);
+        setShowDropdown(true);
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setIsSuggesting(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(handle);
+  }, [query]);
+
+  async function loadCardByName(name: string) {
+    const n = name.trim();
+    if (!n) return;
+
+    setNotice('');
+    setOpenTooltipKey(null);
+    setIsLoadingCard(true);
+    setCard(null);
+
+    setStandardExplanation('');
+    setStandardSynergies('');
+    setAiExplanation('');
+    setAiSynergies('');
+    setActiveTab('explain');
+
+    try {
+      const res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(n)}`);
+      const json = (await safeJson(res)) as ScryfallCard | null;
+
+      if (!res.ok || !json?.name) {
+        setNotice('Could not find that card on Scryfall. Check spelling and try again.');
+        setCard(null);
+        return;
+      }
+
+      setCard(json);
+      setStandardExplanation(buildStandardExplanation(json));
+      setStandardSynergies(buildStandardSynergies(json));
+    } catch {
+      setNotice('Network error while loading card data. Please try again.');
+      setCard(null);
+    } finally {
+      setIsLoadingCard(false);
+    }
+  }
+
+  function onPickSuggestion(name: string) {
+    setSelectedName(name);
+    setQuery(name);
+    setShowDropdown(false);
+    loadCardByName(name);
+  }
+
+  async function onSearchSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const n = query.trim();
+    if (!n) return;
+    setSelectedName(n);
+    setShowDropdown(false);
+    await loadCardByName(n);
+  }
+
+  async function fetchAI(mode: 'explain' | 'synergies') {
+    if (!card) return;
+
+    if (!aiEnabled) {
+      setNotice('AI is turned off (free mode). You are seeing the standard explanation.');
+      return;
+    }
+
+    const payload = {
+      mode,
+      card: {
+        name: card.name,
+        mana_cost: getManaCost(card),
+        type_line: getTypeLine(card),
+        oracle_text: getOracleText(card),
+        keywords: card.keywords || [],
+        colors: card.colors || [],
+        color_identity: card.color_identity || [],
+        produced_mana: card.produced_mana || [],
+        cmc: card.cmc ?? null,
+        rarity: card.rarity ?? null,
+        set: card.set ?? null,
+        set_name: card.set_name ?? null,
+        tags: buildContextTags(card),
+      },
+      prefs: {
+        audience: 'beginner',
+        format: 'bulleted-with-sections',
+        concise: false,
+        commanderFocus: true,
+      },
+    };
+
+    if (mode === 'explain') setIsLoadingExplain(true);
+    else setIsLoadingSynergy(true);
+
+    setNotice('');
+
+    try {
+      const res = await fetch('/api/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await safeJson(res);
+
+      if (!res.ok) {
+        const status = res.status;
+
+        if (status === 401) setNotice('AI is unavailable (invalid API key). Showing standard explanation instead.');
+        else if (status === 429) setNotice('AI is unavailable (quota/billing). This app can run free using the standard explanation.');
+        else setNotice('AI is unavailable right now. Showing standard explanation.');
+
+        return;
+      }
+
+      const text =
+        mode === 'explain'
+          ? (json?.explanation as string) || (json?.text as string) || ''
+          : (json?.synergies as string) || (json?.explanation as string) || (json?.text as string) || '';
+
+      if (!text) {
+        setNotice('AI returned an empty response. Showing standard explanation.');
+        return;
+      }
+
+      if (mode === 'explain') setAiExplanation(text);
+      else setAiSynergies(text);
+    } catch {
+      setNotice('Network error calling AI. Showing standard explanation.');
+    } finally {
+      if (mode === 'explain') setIsLoadingExplain(false);
+      else setIsLoadingSynergy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!card) return;
+    if (!aiEnabled) return;
+    if (!autoFetchAI) return;
+    fetchAI('explain');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card, aiEnabled, autoFetchAI]);
+
+  const cardImage = useMemo(() => getBestCardImage(card), [card]);
+  const oracleText = useMemo(() => getOracleText(card), [card]);
+
+  const showManual = Boolean(card && manual && (preferManualFirst || manualMatchIsExact));
+
+  const explainToShow = aiExplanation || standardExplanation;
+  const synergiesToShow = aiSynergies || standardSynergies;
+
+  const filteredGlossary = useMemo(() => {
+    const q = glossaryQuery.trim().toLowerCase();
+    if (!q) return GLOSSARY;
+    return GLOSSARY.filter((g) => {
+      const hay = `${g.term} ${g.meaning} ${g.details ?? ''} ${(g.tags ?? []).join(' ')}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [glossaryQuery]);
+
+  return (
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Explain My Card</h1>
+            <p className="text-sm text-zinc-400">Search any Magic card. Get a clear explanation + beginner-friendly synergies.</p>
+          </div>
+
+          <div className="flex flex-wrap gap-2 text-xs text-zinc-300">
+            <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2">
+              <input type="checkbox" className="accent-zinc-200" checked={preferManualFirst} onChange={(e) => setPreferManualFirst(e.target.checked)} />
+              Prefer manual explainer first
+            </label>
+
+            <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2">
+              <input
+                type="checkbox"
+                className="accent-zinc-200"
+                checked={aiEnabled}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setAiEnabled(next);
+                  if (!next) setNotice('AI turned off. Using standard explanation (free mode).');
+                  else setNotice('AI turned on. If billing/quota is not enabled, it will fall back to free mode.');
+                }}
+              />
+              Enable AI (optional)
+            </label>
+
+            <label
+              className={cx(
+                'flex items-center gap-2 rounded-lg border px-3 py-2',
+                aiEnabled ? 'border-zinc-800 bg-zinc-900/40 text-zinc-300' : 'border-zinc-900 bg-zinc-950 text-zinc-600'
+              )}
+            >
+              <input type="checkbox" className="accent-zinc-200" checked={autoFetchAI} onChange={(e) => setAutoFetchAI(e.target.checked)} disabled={!aiEnabled} />
+              Auto-fetch AI
+            </label>
+          </div>
+        </div>
+
+        <div className="mt-6" ref={dropdownRef}>
+          <form onSubmit={onSearchSubmit} className="relative">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setShowDropdown(true);
+                  }}
+                  onFocus={() => {
+                    if (suggestions.length) setShowDropdown(true);
+                  }}
+                  placeholder="Type a card name… (e.g., Sol Ring, Rhystic Study, Lightning Greaves)"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-500 shadow-sm outline-none focus:border-zinc-600"
+                />
+
+                {showDropdown && (suggestions.length > 0 || isSuggesting) && (
+                  <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-xl">
+                    {isSuggesting && <div className="px-4 py-3 text-sm text-zinc-400">Searching…</div>}
+
+                    {!isSuggesting &&
+                      suggestions.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => onPickSuggestion(s.name)}
+                          className="flex w-full items-center gap-3 border-b border-zinc-800 px-4 py-3 text-left hover:bg-zinc-800/50"
+                        >
+                          <div className="h-10 w-10 overflow-hidden rounded-lg bg-zinc-800">
+                            {s.image ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={s.image} alt={s.name} className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-xs text-zinc-400">—</div>
+                            )}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-medium text-zinc-100">{s.name}</div>
+                            <div className="truncate text-xs text-zinc-400">
+                              {s.mana_cost ? `${s.mana_cost} · ` : ''}
+                              {s.type_line || 'Card'}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              <button type="submit" className="rounded-xl border border-zinc-800 bg-zinc-100 px-4 py-3 text-sm font-semibold text-zinc-900 hover:bg-white">
+                Search
+              </button>
+            </div>
+          </form>
+
+          <div className="mt-2 text-xs text-zinc-500">Tip: keywords like “trample” or “exile” are clickable.</div>
+        </div>
+
+        {notice ? <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 text-sm text-zinc-200">{notice}</div> : null}
+
+        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
+            <div className="text-sm font-semibold text-zinc-200">Card</div>
+
+            <div className="mt-3">
+              {isLoadingCard ? (
+                <div className="space-y-3">
+                  <div className="h-6 w-2/3 rounded bg-zinc-800" />
+                  <div className="h-48 w-full rounded-xl bg-zinc-800" />
+                  <div className="h-4 w-full rounded bg-zinc-800" />
+                  <div className="h-4 w-5/6 rounded bg-zinc-800" />
+                </div>
+              ) : card ? (
+                <div className="space-y-4">
+                  <div>
+                    <div className="text-lg font-semibold">{card.name}</div>
+                    <div className="mt-1 text-xs text-zinc-400">
+                      {getManaCost(card) ? <span className="mr-2">{getManaCost(card)}</span> : null}
+                      {getTypeLine(card)}
+                    </div>
+                  </div>
+
+                  {cardImage ? (
+                    <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={cardImage} alt={card.name} className="h-auto w-full object-cover" />
+                    </div>
+                  ) : (
+                    <div className="flex h-64 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-sm text-zinc-500">
+                      No image available
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                    <div className="text-xs font-semibold text-zinc-300">Oracle text</div>
+                    <pre className="mt-2 whitespace-pre-wrap text-sm text-zinc-200" onClick={() => setOpenTooltipKey(null)}>
+                      {renderTextWithTooltips(oracleText || 'No oracle text found.', openTooltipKey, setOpenTooltipKey)}
+                    </pre>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+                  Search for a card to see it here.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-semibold text-zinc-200">Explanation</div>
+                <div className="text-xs text-zinc-500">Manual for staples + standard (free) for everything + optional AI enhancement.</div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('explain')}
+                  className={cx(
+                    'rounded-xl border px-3 py-2 text-xs font-semibold',
+                    activeTab === 'explain'
+                      ? 'border-zinc-200 bg-zinc-100 text-zinc-900'
+                      : 'border-zinc-800 bg-zinc-950 text-zinc-200 hover:bg-zinc-900'
+                  )}
+                >
+                  Explain
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('synergies')}
+                  className={cx(
+                    'rounded-xl border px-3 py-2 text-xs font-semibold',
+                    activeTab === 'synergies'
+                      ? 'border-zinc-200 bg-zinc-100 text-zinc-900'
+                      : 'border-zinc-800 bg-zinc-950 text-zinc-200 hover:bg-zinc-900'
+                  )}
+                  disabled={!card}
+                  title={!card ? 'Search a card first' : 'Show synergies'}
+                >
+                  Synergies
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('glossary')}
+                  className={cx(
+                    'rounded-xl border px-3 py-2 text-xs font-semibold',
+                    activeTab === 'glossary'
+                      ? 'border-zinc-200 bg-zinc-100 text-zinc-900'
+                      : 'border-zinc-800 bg-zinc-950 text-zinc-200 hover:bg-zinc-900'
+                  )}
+                >
+                  Glossary
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => fetchAI('explain')}
+                  disabled={!card || isLoadingExplain}
+                  className={cx(
+                    'rounded-xl border px-3 py-2 text-xs font-semibold',
+                    !card || isLoadingExplain
+                      ? 'cursor-not-allowed border-zinc-800 bg-zinc-950 text-zinc-500'
+                      : 'border-zinc-800 bg-zinc-950 text-zinc-200 hover:bg-zinc-900'
+                  )}
+                  title={!card ? 'Search a card first' : 'Try AI (optional)'}
+                >
+                  {isLoadingExplain ? 'Trying…' : 'Try AI'}
+                </button>
+              </div>
+            </div>
+
+            {showManual ? (
+              <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-zinc-100">Manual explainer</div>
+                    <div className="mt-1 text-xs text-zinc-500">{manual!.title}</div>
+                  </div>
+                  <div className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                    Staples library
+                  </div>
+                </div>
+
+                <div className="mt-3 text-sm text-zinc-200">{manual!.short}</div>
+
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+                    <div className="text-xs font-semibold text-zinc-200">Why people play it</div>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-200">
+                      {manual!.why.map((x, i) => (
+                        <li key={i}>{x}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+                    <div className="text-xs font-semibold text-zinc-200">Tips</div>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-200">
+                      {manual!.tips.map((x, i) => (
+                        <li key={i}>{x}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {manual!.gotchas?.length ? (
+                  <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+                    <div className="text-xs font-semibold text-zinc-200">Gotchas</div>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-200">
+                      {manual!.gotchas.map((x, i) => (
+                        <li key={i}>{x}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="mt-4 space-y-4">
+              {activeTab === 'explain' && (
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4" onClick={() => setOpenTooltipKey(null)}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-zinc-100">{aiExplanation ? 'AI-enhanced explanation' : 'Standard explanation (free)'}</div>
+                      <div className="text-xs text-zinc-500">{aiExplanation ? 'Generated by AI (when available).' : 'Generated locally from oracle text + simple rules.'}</div>
+                    </div>
+
+                    <div className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                      {aiExplanation ? 'AI on' : 'Free mode'}
+                    </div>
+                  </div>
+
+                  {!card ? (
+                    <div className="mt-3 text-sm text-zinc-400">Search a card to generate an explanation.</div>
+                  ) : (
+                    <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
+                      {renderTextWithTooltips(explainToShow || 'No explanation available yet.', openTooltipKey, setOpenTooltipKey)}
+                    </pre>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'synergies' && (
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4" onClick={() => setOpenTooltipKey(null)}>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-zinc-100">{aiSynergies ? 'AI-enhanced synergies' : 'Standard synergies (free)'}</div>
+                      <div className="text-xs text-zinc-500">{aiSynergies ? 'Generated by AI (when available).' : 'Generated locally from oracle text + simple rules.'}</div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => fetchAI('synergies')}
+                      disabled={!card || isLoadingSynergy}
+                      className={cx(
+                        'rounded-xl border px-3 py-2 text-xs font-semibold',
+                        !card || isLoadingSynergy
+                          ? 'cursor-not-allowed border-zinc-800 bg-zinc-900/40 text-zinc-500'
+                          : 'border-zinc-800 bg-zinc-900 text-zinc-100 hover:bg-zinc-800/60'
+                      )}
+                    >
+                      {isLoadingSynergy ? 'Trying…' : 'Try AI synergies'}
+                    </button>
+                  </div>
+
+                  {!card ? (
+                    <div className="mt-3 text-sm text-zinc-400">Search a card first.</div>
+                  ) : (
+                    <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
+                      {renderTextWithTooltips(synergiesToShow || 'No synergies available yet.', openTooltipKey, setOpenTooltipKey)}
+                    </pre>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'glossary' && (
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-zinc-100">Glossary</div>
+                      <div className="text-xs text-zinc-500">Common Magic acronyms, abbreviations, and shorthand.</div>
+                    </div>
+
+                    <div className="w-full sm:w-72">
+                      <input
+                        value={glossaryQuery}
+                        onChange={(e) => setGlossaryQuery(e.target.value)}
+                        placeholder="Search glossary… (e.g., ETB, MV, ramp)"
+                        className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-zinc-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 gap-3">
+                    {filteredGlossary.length === 0 ? (
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 text-sm text-zinc-300">No matches. Try a different search.</div>
+                    ) : (
+                      filteredGlossary.map((g) => (
+                        <div key={g.term} className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+                          <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <div className="text-sm font-semibold text-zinc-100">{g.term}</div>
+                            <div className="text-xs text-zinc-300">{g.meaning}</div>
+                          </div>
+                          {g.details ? <div className="mt-2 text-sm text-zinc-200">{g.details}</div> : null}
+                          {g.tags?.length ? <div className="mt-2 text-xs text-zinc-500">Tags: {g.tags.join(', ')}</div> : null}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-500">
+              Tip: Keyword tooltips are for rule words (trample/ward/exile). Glossary is for shorthand (ETB/MV/ramp).
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
