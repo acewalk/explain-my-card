@@ -213,10 +213,15 @@ function escapeRegex(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * OPTION A FIX:
+ * We track the OPEN TOOLTIP by a UNIQUE ID per occurrence (not by the word).
+ * That means only ONE “target” tooltip opens — the one you clicked.
+ */
 function renderTextWithTooltips(
   text: string,
-  openKey: string | null,
-  setOpenKey: (k: string | null) => void
+  openId: string | null,
+  setOpenId: (id: string | null) => void
 ): React.ReactNode {
   if (!text) return null;
 
@@ -234,7 +239,9 @@ function renderTextWithTooltips(
       const keyMatch = keys.find((k) => k.toLowerCase() === part.toLowerCase());
       if (!keyMatch) return <React.Fragment key={`${lineIdx}-${idx}`}>{part}</React.Fragment>;
 
-      const isOpen = openKey === keyMatch;
+      // Unique per occurrence (word + position)
+      const occurrenceId = `${keyMatch}__${lineIdx}-${idx}`;
+      const isOpen = openId === occurrenceId;
       const definition = KEYWORD_DEFINITIONS[keyMatch];
 
       return (
@@ -243,7 +250,6 @@ function renderTextWithTooltips(
             type="button"
             className={cx(
               'mx-0.5 rounded px-1 py-0.5 text-left font-semibold',
-              // stronger visual so you NOTICE the highlight
               'bg-zinc-900/60 text-zinc-50',
               'underline decoration-zinc-300 underline-offset-2',
               'hover:bg-zinc-800/80 focus:outline-none focus:ring-2 focus:ring-zinc-500'
@@ -252,9 +258,9 @@ function renderTextWithTooltips(
             aria-label={`${keyMatch} definition`}
             onClick={(e) => {
               e.stopPropagation();
-              setOpenKey(isOpen ? null : keyMatch);
+              setOpenId(isOpen ? null : occurrenceId);
             }}
-            onFocus={() => setOpenKey(keyMatch)}
+            onFocus={() => setOpenId(occurrenceId)}
           >
             {part}
           </button>
@@ -329,10 +335,7 @@ const GLOSSARY_BASE: GlossaryItem[] = [
   { term: 'Priority', meaning: 'Who can act right now', details: 'Only a player with priority can cast a spell or activate most abilities.', tags: ['rules'] },
 ];
 
-// Which tooltip terms should ALSO appear in the Glossary?
-// (This includes your “abilities” like deathtouch/reach/etc.)
 const GLOSSARY_INCLUDE_TOOLTIP_TERMS = new Set([
-  // Abilities / keyword abilities
   'first strike',
   'double strike',
   'trample',
@@ -349,8 +352,6 @@ const GLOSSARY_INCLUDE_TOOLTIP_TERMS = new Set([
   'indestructible',
   'protection',
   'flash',
-
-  // Keyword actions / mechanics (still common to learn)
   'convoke',
   'delve',
   'kicker',
@@ -358,8 +359,6 @@ const GLOSSARY_INCLUDE_TOOLTIP_TERMS = new Set([
   'cycling',
   'equip',
   'enchant',
-
-  // Common rules words that are super useful
   'destroy',
   'exile',
   'graveyard',
@@ -368,8 +367,6 @@ const GLOSSARY_INCLUDE_TOOLTIP_TERMS = new Set([
   'mill',
   'counter',
   'token',
-
-  // Commander/common concepts
   'ramp',
   'commander',
   'board wipe',
@@ -377,8 +374,6 @@ const GLOSSARY_INCLUDE_TOOLTIP_TERMS = new Set([
   'target',
   'targets',
   'removal',
-
-  // Symbols
   '{T}',
   '{C}',
 ]);
@@ -388,7 +383,6 @@ function makeGlossaryFromTooltips(): GlossaryItem[] {
   for (const [term, def] of Object.entries(KEYWORD_DEFINITIONS)) {
     if (!GLOSSARY_INCLUDE_TOOLTIP_TERMS.has(term)) continue;
 
-    // If the definition looks like "Term: description..." split it
     const idx = def.indexOf(':');
     const meaning = idx > 0 ? def.slice(0, idx).trim() : term;
     const details = idx > 0 ? def.slice(idx + 1).trim() : def.trim();
@@ -397,7 +391,7 @@ function makeGlossaryFromTooltips(): GlossaryItem[] {
       term,
       meaning,
       details,
-      tags: GLOSSARY_INCLUDE_TOOLTIP_TERMS.has(term) ? ['keyword/ability'] : undefined,
+      tags: ['keyword/ability'],
     });
   }
   return out;
@@ -784,7 +778,8 @@ export default function Page() {
   const [autoFetchAI, setAutoFetchAI] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
 
-  const [openTooltipKey, setOpenTooltipKey] = useState<string | null>(null);
+  // ✅ Option A: track the unique occurrence id (not the keyword itself)
+  const [openTooltipId, setOpenTooltipId] = useState<string | null>(null);
 
   const [glossaryQuery, setGlossaryQuery] = useState('');
 
@@ -807,7 +802,7 @@ export default function Page() {
     function onDocMouseDown(e: MouseEvent) {
       if (dropdownRef.current && dropdownRef.current.contains(e.target as Node)) return;
       setShowDropdown(false);
-      setOpenTooltipKey(null);
+      setOpenTooltipId(null);
     }
     document.addEventListener('mousedown', onDocMouseDown);
     return () => document.removeEventListener('mousedown', onDocMouseDown);
@@ -815,7 +810,7 @@ export default function Page() {
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpenTooltipKey(null);
+      if (e.key === 'Escape') setOpenTooltipId(null);
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
@@ -871,7 +866,7 @@ export default function Page() {
     if (!n) return;
 
     setNotice('');
-    setOpenTooltipKey(null);
+    setOpenTooltipId(null);
     setIsLoadingCard(true);
     setCard(null);
 
@@ -1120,7 +1115,7 @@ export default function Page() {
           </form>
 
           <div className="mt-2 text-xs text-zinc-500">
-            Tip: Glossary now includes <span className="font-semibold text-zinc-200">abilities</span> (deathtouch, flying, trample, etc.) plus acronyms (ETB/MV) and slang (ramp, board wipe).
+            Tip: Glossary includes <span className="font-semibold text-zinc-200">abilities</span> (deathtouch, flying, trample, etc.) plus acronyms (ETB/MV) and slang (ramp, board wipe).
           </div>
         </div>
 
@@ -1240,7 +1235,7 @@ export default function Page() {
 
             <div className="mt-4 space-y-4">
               {activeTab === 'explain' && (
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4" onClick={() => setOpenTooltipKey(null)}>
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4" onClick={() => setOpenTooltipId(null)}>
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-zinc-100">{aiExplanation ? 'AI-enhanced explanation' : 'Standard explanation (free)'}</div>
@@ -1254,14 +1249,14 @@ export default function Page() {
                     <div className="mt-3 text-sm text-zinc-400">Search a card to generate an explanation.</div>
                   ) : (
                     <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
-                      {renderTextWithTooltips(explainToShow || 'No explanation available yet.', openTooltipKey, setOpenTooltipKey)}
+                      {renderTextWithTooltips(explainToShow || 'No explanation available yet.', openTooltipId, setOpenTooltipId)}
                     </pre>
                   )}
                 </div>
               )}
 
               {activeTab === 'synergies' && (
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4" onClick={() => setOpenTooltipKey(null)}>
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4" onClick={() => setOpenTooltipId(null)}>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <div className="text-sm font-semibold text-zinc-100">{aiSynergies ? 'AI-enhanced synergies' : 'Standard synergies (free)'}</div>
@@ -1287,7 +1282,7 @@ export default function Page() {
                     <div className="mt-3 text-sm text-zinc-400">Search a card first.</div>
                   ) : (
                     <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
-                      {renderTextWithTooltips(synergiesToShow || 'No synergies available yet.', openTooltipKey, setOpenTooltipKey)}
+                      {renderTextWithTooltips(synergiesToShow || 'No synergies available yet.', openTooltipId, setOpenTooltipId)}
                     </pre>
                   )}
                 </div>
