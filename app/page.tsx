@@ -123,86 +123,24 @@ function buildContextTags(card: ScryfallCard | null): string[] {
   if (o.includes('counter target') || o.includes('counterspell')) tags.push('countermagic');
   if (o.includes('destroy') || o.includes('exile')) tags.push('removal');
   if (o.includes('each opponent')) tags.push('each-opponent');
-  if (o.includes('whenever you cast')) tags.push('cast-triggers');
-  if (o.includes('enters the battlefield')) tags.push('etb');
+  if (o.includes('whenever you cast') || o.includes('whenever you play') || o.includes('magecraft')) tags.push('cast-triggers');
+  if (o.includes('enters the battlefield') || o.includes('when') && o.includes('enters')) tags.push('etb');
   if (o.includes('sacrifice')) tags.push('sacrifice');
   if (o.includes('graveyard')) tags.push('graveyard');
   if (o.includes('search your library')) tags.push('tutor-or-search');
   if (o.includes('add {') || o.includes('adds {') || o.includes('add one mana') || o.includes('add two mana')) tags.push('mana');
+  if (o.includes('gain life') || o.includes('lifelink')) tags.push('lifegain');
+  if (o.includes('+1/+1 counter') || o.includes('proliferate')) tags.push('counters');
 
   return Array.from(new Set(tags));
 }
 
 /**
  * =========================
- * Role + Speed (FREE, deterministic)
- * =========================
- */
-function deriveRole(card: ScryfallCard): string {
-  const tags = buildContextTags(card);
-  const typeLine = getTypeLine(card).toLowerCase();
-  const oracle = getOracleText(card).toLowerCase();
-
-  // Priority order (most “what people mean” first)
-  if (tags.includes('countermagic')) return 'Counterspell';
-  if (tags.includes('removal')) return 'Removal';
-  if (tags.includes('mana') || tags.includes('treasure')) return 'Ramp';
-  if (tags.includes('card-draw')) return 'Card Draw';
-  if (tags.includes('tutor-or-search')) return 'Tutor';
-  if (tags.includes('tokens')) return 'Token Maker';
-  if (tags.includes('graveyard')) return 'Graveyard / Recursion';
-  if (tags.includes('sacrifice')) return 'Sacrifice / Aristocrats';
-
-  if (typeLine.includes('planeswalker')) return 'Planeswalker';
-  if (typeLine.includes('equipment')) return 'Equipment';
-  if (typeLine.includes('aura')) return 'Aura';
-  if (typeLine.includes('land')) return 'Land / Utility';
-  if (typeLine.includes('creature')) {
-    if (oracle.includes('whenever') || oracle.includes('at the beginning') || tags.includes('etb')) return 'Value Creature';
-    return 'Creature';
-  }
-
-  return 'Utility / Value';
-}
-
-function deriveSpeed(card: ScryfallCard): string {
-  const t = getTypeLine(card).toLowerCase();
-  const o = getOracleText(card).toLowerCase();
-
-  // Most correct, simplest heuristics
-  if (t.includes('instant')) return 'Instant-speed';
-  if (o.includes('flash')) return 'Instant-speed (Flash)';
-
-  // Activated abilities can be instant-speed unless restricted, but we keep it beginner-simple:
-  // If card is not an instant / flash, we call it “Sorcery-speed” as a default.
-  return 'Sorcery-speed';
-}
-
-function deriveSpeedHint(card: ScryfallCard): string {
-  const t = getTypeLine(card).toLowerCase();
-  const o = getOracleText(card).toLowerCase();
-
-  if (t.includes('instant')) return 'You can cast this anytime you have priority (including in response).';
-  if (o.includes('flash')) return 'Flash means you can cast it like an instant.';
-  return 'Usually cast on your turn during a main phase (unless it’s an activated ability).';
-}
-
-/**
- * =========================
  * Keyword tooltips (FREE)
- * Tooltips show ONLY in Explanation/Synergies (not oracle text)
  * =========================
  */
 const KEYWORD_DEFINITIONS: Record<string, string> = {
-  removal: 'Removal: Cards or effects that answer threats by destroying, exiling, bouncing, or otherwise neutralizing them.',
-  target:
-    'Target: If something says “target,” you choose it when you cast/activate. If the target becomes illegal, the spell/ability may fizzle (fail to resolve).',
-  targets:
-    'Targets: Same as “target.” You must choose legal targets. If they become illegal, the spell/ability may fail.',
-  commander:
-    'Commander: A multiplayer format. You build a 100-card deck around a legendary creature (your commander) and start at 40 life.',
-  'board wipe': 'Board wipe: A spell that removes many permanents at once (often all creatures). Example: Wrath of God.',
-
   'first strike': 'First strike: This creature deals combat damage before creatures without first strike.',
   'double strike': 'Double strike: This creature deals combat damage twice (first strike damage and regular damage).',
   trample:
@@ -214,7 +152,6 @@ const KEYWORD_DEFINITIONS: Record<string, string> = {
   haste: 'Haste: This creature can attack and use {T} abilities the turn it enters the battlefield.',
   deathtouch: 'Deathtouch: Any amount of damage this creature deals to another creature is lethal.',
   lifelink: 'Lifelink: Damage dealt by this creature also causes you to gain that much life.',
-
   ward:
     'Ward: When this becomes the target of a spell or ability an opponent controls, counter it unless that opponent pays the ward cost (if any).',
   hexproof: 'Hexproof: This permanent cannot be the target of spells or abilities your opponents control.',
@@ -222,7 +159,6 @@ const KEYWORD_DEFINITIONS: Record<string, string> = {
   indestructible: 'Indestructible: This permanent cannot be destroyed by damage or “destroy” effects.',
   protection:
     'Protection: Prevents certain damage, targeting, blocking, and enchanting/equipping based on the stated quality (e.g., “protection from red”).',
-
   flash: 'Flash: You may cast this spell any time you could cast an instant.',
   convoke:
     'Convoke: Your creatures can help pay for this spell. Each creature you tap pays for {1} or one mana of that creature’s color.',
@@ -231,17 +167,12 @@ const KEYWORD_DEFINITIONS: Record<string, string> = {
   cascade:
     'Cascade: When you cast this spell, exile cards from the top until you exile a nonland card with lower mana value. You may cast it for free.',
   cycling: 'Cycling: You may pay a cost and discard this card to draw a card.',
-
   equip: 'Equip: Pay the equip cost to attach the Equipment to a creature you control (normally only as a sorcery).',
   enchant: 'Enchant: This Aura targets something as you cast it and attaches to that kind of object when it resolves.',
   sacrifice:
     'Sacrifice: Move a permanent you control to its owner’s graveyard. This is not “destroy,” and it does not target unless it says target.',
   exile:
     'Exile: Move a card to the exile zone. It is not in the graveyard, and many recursion effects cannot get it back.',
-  destroy:
-    'Destroy: Puts a permanent into the graveyard. This can be stopped by indestructible or regeneration (if applicable).',
-  graveyard:
-    'Graveyard: Where cards go when they die, are discarded, or are milled. Many decks use the graveyard as a resource.',
   mill: 'Mill: Put cards from the top of a library into a graveyard.',
   scry:
     'Scry: Look at that many cards from the top of your library, then put any number on the bottom and the rest on top.',
@@ -249,13 +180,6 @@ const KEYWORD_DEFINITIONS: Record<string, string> = {
     'Surveil: Look at that many cards from the top of your library, then put any number into your graveyard and the rest back on top.',
   counter: 'Counter: Remove a spell from the stack so it does not resolve (usually goes to the graveyard).',
   token: 'Token: A game object that represents a permanent but is not a card.',
-
-  '{T}': 'Tap symbol: Tap this permanent to pay this cost.',
-  '{C}': 'Colorless mana: This is colorless (not “any color”).',
-
-  ramp: 'Ramp: Any way to increase your mana faster than playing one land per turn (rocks, extra lands, dorks).',
-  synergy: 'Synergy: Cards that work well together and make each other stronger.',
-  'mana value': 'Mana value (MV): The total cost of a spell as a number. Example {2}{U} has MV 3.',
 };
 
 function escapeRegex(s: string) {
@@ -263,21 +187,19 @@ function escapeRegex(s: string) {
 }
 
 /**
- * OPTION A FIX:
- * Track the OPEN TOOLTIP by a UNIQUE ID per occurrence (not by the word).
+ * Option A: only ONE tooltip open at a time (openKey), and it opens where the clicked word is.
  */
 function renderTextWithTooltips(
   text: string,
-  openId: string | null,
-  setOpenId: (id: string | null) => void
+  openKey: string | null,
+  setOpenKey: (k: string | null) => void
 ): React.ReactNode {
   if (!text) return null;
 
   const keys = Object.keys(KEYWORD_DEFINITIONS).sort((a, b) => b.length - a.length);
   const pattern = keys.map((k) => escapeRegex(k)).join('|');
-  if (!pattern) return text;
-
   const re = new RegExp(`(${pattern})`, 'gi');
+
   const lines = text.split('\n');
 
   return lines.map((line, lineIdx) => {
@@ -287,8 +209,7 @@ function renderTextWithTooltips(
       const keyMatch = keys.find((k) => k.toLowerCase() === part.toLowerCase());
       if (!keyMatch) return <React.Fragment key={`${lineIdx}-${idx}`}>{part}</React.Fragment>;
 
-      const occurrenceId = `${keyMatch}__${lineIdx}-${idx}`;
-      const isOpen = openId === occurrenceId;
+      const isOpen = openKey === keyMatch;
       const definition = KEYWORD_DEFINITIONS[keyMatch];
 
       return (
@@ -297,33 +218,33 @@ function renderTextWithTooltips(
             type="button"
             className={cx(
               'mx-0.5 rounded px-1 py-0.5 text-left font-semibold',
-              'bg-zinc-900/60 text-zinc-50',
-              'underline decoration-zinc-300 underline-offset-2',
-              'hover:bg-zinc-800/80 focus:outline-none focus:ring-2 focus:ring-zinc-500'
+              'underline decoration-zinc-600 underline-offset-2',
+              'hover:bg-zinc-800/60 focus:outline-none focus:ring-2 focus:ring-zinc-500',
+              'text-zinc-100'
             )}
             aria-expanded={isOpen}
             aria-label={`${keyMatch} definition`}
             onClick={(e) => {
               e.stopPropagation();
-              setOpenId(isOpen ? null : occurrenceId);
+              setOpenKey(isOpen ? null : keyMatch);
             }}
-            onFocus={() => setOpenId(occurrenceId)}
+            onFocus={() => setOpenKey(keyMatch)}
           >
             {part}
           </button>
 
-          <span
-            className={cx(
-              'pointer-events-none absolute left-0 top-full z-50 mt-2 w-[min(360px,86vw)]',
-              'rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 shadow-xl',
-              'transition-opacity',
-              isOpen ? 'opacity-100' : 'opacity-0'
-            )}
-            role="tooltip"
-          >
-            <span className="block text-zinc-100">{definition}</span>
-            <span className="mt-1 block text-[11px] text-zinc-400">Tip: click anywhere to close.</span>
-          </span>
+          {isOpen ? (
+            <span
+              className={cx(
+                'absolute left-0 top-full z-50 mt-2 w-[min(360px,85vw)]',
+                'rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 shadow-xl'
+              )}
+              role="tooltip"
+            >
+              <span className="block text-zinc-100">{definition}</span>
+              <span className="mt-1 block text-[11px] text-zinc-400">Tip: click anywhere to close. Esc also closes.</span>
+            </span>
+          ) : null}
         </span>
       );
     });
@@ -339,7 +260,7 @@ function renderTextWithTooltips(
 
 /**
  * =========================
- * Glossary (Acronyms + shorthand)
+ * Glossary (Acronyms + shorthand + abilities)
  * =========================
  */
 type GlossaryItem = {
@@ -349,7 +270,7 @@ type GlossaryItem = {
   tags?: string[];
 };
 
-const GLOSSARY_BASE: GlossaryItem[] = [
+const BASE_GLOSSARY: GlossaryItem[] = [
   { term: 'ETB', meaning: 'Enters the Battlefield', details: 'Triggered abilities that happen when a permanent enters the battlefield.', tags: ['trigger', 'battlefield'] },
   { term: 'LTB', meaning: 'Leaves the Battlefield', details: 'Triggered abilities that happen when a permanent leaves the battlefield (dies, exiled, bounced, etc.).', tags: ['trigger', 'battlefield'] },
   { term: 'Dies', meaning: 'Goes from battlefield to graveyard', details: '“Dies” specifically means it went to a graveyard from the battlefield.', tags: ['rules'] },
@@ -382,78 +303,16 @@ const GLOSSARY_BASE: GlossaryItem[] = [
   { term: 'Priority', meaning: 'Who can act right now', details: 'Only a player with priority can cast a spell or activate most abilities.', tags: ['rules'] },
 ];
 
-const GLOSSARY_INCLUDE_TOOLTIP_TERMS = new Set([
-  'first strike',
-  'double strike',
-  'trample',
-  'menace',
-  'flying',
-  'reach',
-  'vigilance',
-  'haste',
-  'deathtouch',
-  'lifelink',
-  'ward',
-  'hexproof',
-  'shroud',
-  'indestructible',
-  'protection',
-  'flash',
-  'convoke',
-  'delve',
-  'kicker',
-  'cascade',
-  'cycling',
-  'equip',
-  'enchant',
-  'destroy',
-  'exile',
-  'graveyard',
-  'scry',
-  'surveil',
-  'mill',
-  'counter',
-  'token',
-  'ramp',
-  'commander',
-  'board wipe',
-  'mana value',
-  'target',
-  'targets',
-  'removal',
-  '{T}',
-  '{C}',
-]);
+const ABILITY_GLOSSARY: GlossaryItem[] = Object.entries(KEYWORD_DEFINITIONS).map(([term, meaning]) => ({
+  term,
+  meaning: meaning.split(':')[0].trim(),
+  details: meaning,
+  tags: ['ability'],
+}));
 
-function makeGlossaryFromTooltips(): GlossaryItem[] {
-  const out: GlossaryItem[] = [];
-  for (const [term, def] of Object.entries(KEYWORD_DEFINITIONS)) {
-    if (!GLOSSARY_INCLUDE_TOOLTIP_TERMS.has(term)) continue;
-
-    const idx = def.indexOf(':');
-    const meaning = idx > 0 ? def.slice(0, idx).trim() : term;
-    const details = idx > 0 ? def.slice(idx + 1).trim() : def.trim();
-
-    out.push({
-      term,
-      meaning,
-      details,
-      tags: ['keyword/ability'],
-    });
-  }
-  return out;
-}
-
-function mergeGlossaries(a: GlossaryItem[], b: GlossaryItem[]): GlossaryItem[] {
-  const map = new Map<string, GlossaryItem>();
-  for (const item of [...a, ...b]) {
-    const key = item.term.toLowerCase().trim();
-    if (!map.has(key)) map.set(key, item);
-  }
-  return Array.from(map.values()).sort((x, y) => x.term.localeCompare(y.term));
-}
-
-const GLOSSARY: GlossaryItem[] = mergeGlossaries(GLOSSARY_BASE, makeGlossaryFromTooltips());
+const GLOSSARY: GlossaryItem[] = [...BASE_GLOSSARY, ...ABILITY_GLOSSARY].sort((a, b) =>
+  a.term.toLowerCase().localeCompare(b.term.toLowerCase())
+);
 
 async function safeJson(res: Response) {
   try {
@@ -464,9 +323,95 @@ async function safeJson(res: Response) {
 }
 
 /**
+ * =========================
  * FREE, deterministic "Standard explanation"
- * Now includes Role + Speed + Example Play.
+ * + now includes Example play + Role/Speed badges
+ * =========================
  */
+
+type RoleBadge = {
+  role: 'Ramp' | 'Removal' | 'Draw' | 'Threat' | 'Engine' | 'Protection' | 'Tutor' | 'Utility' | 'Disruption';
+  speed: 'Early' | 'Mid' | 'Late';
+};
+
+function inferRoleAndSpeed(card: ScryfallCard): RoleBadge {
+  const tags = buildContextTags(card);
+  const tl = getTypeLine(card).toLowerCase();
+  const o = getOracleText(card).toLowerCase();
+  const mv = card.cmc ?? 0;
+
+  let role: RoleBadge['role'] = 'Utility';
+
+  if (tags.includes('mana') || tags.includes('treasure')) role = 'Ramp';
+  else if (tags.includes('removal')) role = 'Removal';
+  else if (tags.includes('card-draw')) role = 'Draw';
+  else if (tags.includes('tutor-or-search')) role = 'Tutor';
+  else if (o.includes('hexproof') || o.includes('indestructible') || o.includes('ward') || o.includes('protection')) role = 'Protection';
+  else if (tags.includes('countermagic')) role = 'Disruption';
+  else if (tl.includes('creature') && (card.power || card.toughness)) role = 'Threat';
+  else if (o.includes('whenever') || o.includes('at the beginning of') || o.includes('each upkeep') || o.includes('draw') || o.includes('create')) role = 'Engine';
+
+  let speed: RoleBadge['speed'] = 'Mid';
+  if (mv <= 2) speed = 'Early';
+  else if (mv >= 6) speed = 'Late';
+
+  // A few overrides for “feel”
+  if (role === 'Ramp' && mv <= 2) speed = 'Early';
+  if (role === 'Removal' && mv <= 2) speed = 'Early';
+  if (role === 'Engine' && mv >= 5) speed = 'Late';
+
+  return { role, speed };
+}
+
+function buildExamplePlay(card: ScryfallCard): string[] {
+  const tags = buildContextTags(card);
+  const tl = getTypeLine(card).toLowerCase();
+  const o = getOracleText(card).toLowerCase();
+  const mv = card.cmc ?? 0;
+
+  const lines: string[] = [];
+
+  if (tags.includes('mana')) {
+    lines.push('• Example play: Cast this early, then use the extra mana immediately to get ahead on tempo.');
+  }
+  if (tags.includes('removal')) {
+    lines.push('• Example play: Hold this until a threat is about to win the game or enable a combo, then answer it.');
+  }
+  if (tags.includes('card-draw')) {
+    lines.push('• Example play: Use this when you have spare mana and can safely spend a turn refilling your hand.');
+  }
+  if (tags.includes('countermagic')) {
+    lines.push('• Example play: Leave mana open when opponents are likely to cast a board wipe or game-ending spell.');
+  }
+  if (tags.includes('tokens')) {
+    lines.push('• Example play: Make tokens first, then turn them into damage (anthems) or value (sacrifice outlets).');
+  }
+  if (tags.includes('graveyard')) {
+    lines.push('• Example play: Set up your graveyard first (self-mill, discarding, sacrificing), then convert it into value.');
+  }
+  if (tags.includes('etb')) {
+    lines.push('• Example play: If this has an ETB effect, consider blink/bounce lines to reuse it for more value.');
+  }
+  if (tags.includes('counters')) {
+    lines.push('• Example play: If this uses counters, pair with +1/+1 counter support or proliferate to scale faster.');
+  }
+  if (tl.includes('equipment')) {
+    lines.push('• Example play: Play the Equipment early, then equip when you’re ready to attack or protect a key creature.');
+  }
+  if (tl.includes('aura')) {
+    lines.push('• Example play: Try to cast Auras when opponents are tapped out, so you don’t get blown out by removal.');
+  }
+
+  if (lines.length === 0) {
+    if (mv <= 2) lines.push('• Example play: This is cheap—try to develop it early to improve your curve.');
+    else if (mv >= 6) lines.push('• Example play: Plan a turn ahead (ramp or protection) so this resolves and matters immediately.');
+    else lines.push('• Example play: Look for the best timing window where this creates advantage right away.');
+  }
+
+  // Keep it short + readable
+  return lines.slice(0, 3);
+}
+
 function buildStandardExplanation(card: ScryfallCard): string {
   const typeLine = getTypeLine(card);
   const oracle = getOracleText(card);
@@ -477,38 +422,28 @@ function buildStandardExplanation(card: ScryfallCard): string {
   const tl = typeLine.toLowerCase();
   const o = oracle.toLowerCase();
 
-  const role = deriveRole(card);
-  const speed = deriveSpeed(card);
-  const speedHint = deriveSpeedHint(card);
-
   const what: string[] = [];
   const why: string[] = [];
   const patterns: string[] = [];
   const gotchas: string[] = [];
   const tips: string[] = [];
-  const example: string[] = [];
 
-  // A) Quick header lines
-  what.push(`• Role: ${role}`);
-  what.push(`• Speed: ${speed} — ${speedHint}`);
-
-  // B) What it does
-  if (tags.includes('mana') || (tl.includes('artifact') && o.includes('{t}: add'))) what.push('• Ramp: helps you produce mana, so you can cast spells sooner.');
-  if (tags.includes('card-draw')) what.push('• Card Draw: helps you draw extra cards (more options each turn).');
+  if (tags.includes('mana') || (tl.includes('artifact') && o.includes('{t}: add'))) what.push('• Helps you produce mana, so you can cast spells sooner.');
+  if (tags.includes('card-draw')) what.push('• Helps you draw extra cards (more options each turn).');
   if (tags.includes('removal')) what.push('• Removal: it answers a threat (often by destroying or exiling).');
-  if (tags.includes('tokens')) what.push('• Tokens: creates tokens, which can build a board quickly.');
-  if (tags.includes('countermagic')) what.push('• Counter: it can stop an opponent’s spell so it does not resolve.');
-  if (tags.includes('graveyard')) what.push('• Graveyard: interacts with the graveyard (yours or opponents’).');
-  if (tags.includes('tutor-or-search')) what.push('• Tutor: lets you search your library for a card or land (consistency).');
-  if (tl.includes('creature') && (card.power || card.toughness)) what.push(`• Creature: (${card.power ?? '?'} / ${card.toughness ?? '?'}) — it can attack and block.`);
-  if (tl.includes('planeswalker')) what.push('• Planeswalker: you activate one loyalty ability per turn (on your turn).');
+  if (tags.includes('tokens')) what.push('• Creates tokens (bodies on board) which can attack, block, or fuel other effects.');
+  if (tags.includes('countermagic')) what.push('• Can stop an opponent’s spell by countering it (it does not resolve).');
+  if (tags.includes('graveyard')) what.push('• Interacts with the graveyard (yours or opponents’).');
+  if (tags.includes('tutor-or-search')) what.push('• Lets you search your library (increases consistency).');
+  if (tags.includes('counters')) what.push('• Uses counters (often scales over time with support like proliferate).');
 
-  if (what.length === 0)
-    what.push(oracle.trim() ? '• This card’s main effect is described in its oracle text below.' : '• This card does not have oracle text (or it was not available from Scryfall).');
+  if (tl.includes('creature') && (card.power || card.toughness)) what.push(`• It is a creature (${card.power ?? '?'} / ${card.toughness ?? '?'}). It can attack and block.`);
+  if (tl.includes('planeswalker')) what.push('• It is a planeswalker. You activate one loyalty ability per turn (on your turn).');
 
-  // C) Why people play it
-  if (tags.includes('mana') || tags.includes('treasure')) {
-    why.push('• Ramp is strong in Commander because games often revolve around big turns.');
+  if (what.length === 0) what.push(oracle.trim() ? '• This card’s main effect is described in its oracle text below.' : '• This card does not have oracle text (or it was not available from Scryfall).');
+
+  if (tags.includes('mana')) {
+    why.push('• Mana acceleration is strong in Commander because games often revolve around big turns.');
     patterns.push('• Play it early if possible, then use the extra mana immediately.');
     tips.push('• Early ramp is usually more valuable than late ramp.');
   }
@@ -521,7 +456,6 @@ function buildStandardExplanation(card: ScryfallCard): string {
     why.push('• Commander is threat-dense; efficient removal keeps you from losing to one problem card.');
     patterns.push('• Hold removal for the most dangerous threat, not the first creature you see.');
     gotchas.push('• Check what it can target (creature only vs any permanent, etc.).');
-    gotchas.push('• This card targets. If the target becomes illegal, the effect may fail.');
     tips.push('• Save removal for cards that will beat you soon or enable a combo.');
   }
   if (tags.includes('countermagic')) {
@@ -531,8 +465,8 @@ function buildStandardExplanation(card: ScryfallCard): string {
   }
   if (tags.includes('tokens')) {
     why.push('• Tokens scale well with anthem effects, sacrifice outlets, and “go wide” strategies.');
-    patterns.push('• Make tokens, then use them to attack, block, or fuel other effects.');
-    tips.push('• Token decks usually want ways to buff tokens or convert them into value.');
+    patterns.push('• Make tokens, then use them to attack, block, or convert them into value.');
+    tips.push('• Token decks usually want ways to buff tokens or convert them into cards/mana.');
   }
   if (tags.includes('graveyard')) {
     why.push('• Graveyard interaction enables recursion, sacrifice loops, and value engines.');
@@ -542,12 +476,17 @@ function buildStandardExplanation(card: ScryfallCard): string {
   if (tags.includes('tutor-or-search')) {
     why.push('• Searching makes your deck more consistent (finds the right card for the situation).');
     patterns.push('• Decide what you need next turn (answer vs win condition) before you search.');
-    tips.push('• Try to tutor with a plan: “What am I doing the next 2 turns?”');
+    tips.push('• Try to tutor with a plan: “What am I doing for the next 2 turns?”');
+  }
+  if (tags.includes('counters')) {
+    why.push('• Counter-based cards scale well with support like proliferate or counter doublers.');
+    patterns.push('• Add counters over time, then convert them into damage/value.');
+    tips.push('• If your deck supports counters, this often snowballs quickly.');
   }
 
-  // D) General gotchas
-  if (o.includes('exile')) gotchas.push('• Exile is different from destroy: it often prevents recursion and many death triggers.');
-  if (o.includes('until end of turn')) gotchas.push('• “Until end of turn” effects wear off at the end of the turn.');
+  if (o.includes('target')) gotchas.push('• This card targets. If the target becomes illegal, the effect may fail.');
+  if (o.includes('exile')) gotchas.push('• Exile is different from destroy: it usually prevents most recursion.');
+  if (o.includes('until end of turn')) gotchas.push('• “Until end of turn” effects wear off during cleanup at the end of the turn.');
   if (tl.includes('equipment')) {
     gotchas.push('• Equipment must be attached by paying its equip cost (normally only as a sorcery).');
     tips.push('• Equip is not the same as casting the Equipment.');
@@ -564,27 +503,6 @@ function buildStandardExplanation(card: ScryfallCard): string {
   if (cmc !== null && cmc >= 6) tips.push('• This is a higher-cost card. Decks usually want ramp or cost reduction to cast it reliably.');
   if (manaCost && manaCost.includes('{X}')) tips.push('• X is chosen as you cast the spell, and it affects the total mana you pay.');
 
-  // E) Example play (new!)
-  if (role === 'Removal') {
-    example.push('• Example: An opponent attacks with a scary creature. You cast this before damage to remove it, saving life and stopping future attacks.');
-    example.push('• Example: An opponent is about to combo with a key creature/permanent. You remove it right before it matters.');
-  } else if (role === 'Counterspell') {
-    example.push('• Example: Opponent casts a board wipe. You counter it to protect your board and keep your advantage.');
-    example.push('• Example: Opponent casts a combo piece. You counter it while it’s on the stack (before it resolves).');
-  } else if (role === 'Ramp') {
-    example.push('• Example: You play this early (turn 1–3). Next turn, you have extra mana to cast your commander sooner.');
-    example.push('• Example: You use the extra mana to cast two spells in one turn (develop + interact).');
-  } else if (role === 'Card Draw') {
-    example.push('• Example: You cast this when you have spare mana, drawing into lands/removal so you don’t run out of options.');
-    example.push('• Example: After a board wipe, you draw extra cards to rebuild faster than opponents.');
-  } else if (role === 'Token Maker') {
-    example.push('• Example: You make tokens over a few turns, then attack with a wide board once you have enough bodies.');
-    example.push('• Example: You use tokens to block (defense) or sacrifice them for value (if your deck does that).');
-  } else {
-    example.push('• Example: You play this when it helps your plan right now (protecting something, gaining value, or setting up the next turn).');
-    example.push('• Example: You wait until it creates immediate impact instead of playing it “just because you can.”');
-  }
-
   const ensure = (arr: string[], fallback: string) => {
     if (arr.length === 0) arr.push(`• ${fallback}`);
   };
@@ -592,7 +510,8 @@ function buildStandardExplanation(card: ScryfallCard): string {
   ensure(patterns, 'Read the oracle text and look for the best timing window (early, mid, or late game).');
   ensure(gotchas, 'No major special rules notes beyond normal Magic rules.');
   ensure(tips, 'If you are unsure, ask: “What problem does this card solve for me right now?”');
-  ensure(example, '• Example: Think about what you want to happen next turn, then use this card to move toward that plan.');
+
+  const examplePlay = buildExamplePlay(card);
 
   return [
     `1) What this card does`,
@@ -611,73 +530,252 @@ function buildStandardExplanation(card: ScryfallCard): string {
     ...tips,
     ``,
     `6) Example play`,
-    ...example,
+    ...examplePlay,
   ].join('\n');
 }
 
+/**
+ * =========================
+ * FREE "Standard synergies" — upgraded with mechanic detectors
+ * =========================
+ */
+type Mechanics = {
+  tokens: boolean;
+  treasure: boolean;
+  etb: boolean;
+  blink: boolean;
+  dies: boolean;
+  sacrifice: boolean;
+  aristocrats: boolean;
+  counters: boolean;
+  plusCounters: boolean;
+  proliferate: boolean;
+  graveyard: boolean;
+  reanimate: boolean;
+  selfMill: boolean;
+  spellslinger: boolean;
+  copySpells: boolean;
+  costReduce: boolean;
+  equipment: boolean;
+  aura: boolean;
+  artifacts: boolean;
+  enchantments: boolean;
+  lifegain: boolean;
+  voltron: boolean;
+  goWide: boolean;
+  bigMana: boolean;
+  manaSink: boolean;
+  tribal: boolean;
+  planeswalker: boolean;
+};
+
+function detectMechanics(card: ScryfallCard): Mechanics {
+  const tl = getTypeLine(card).toLowerCase();
+  const o = getOracleText(card).toLowerCase();
+  const kw = (card.keywords ?? []).map((k) => k.toLowerCase());
+
+  const has = (s: string) => o.includes(s);
+
+  const tokens = has('token') || has('tokens') || has('create');
+  const treasure = has('treasure');
+  const etb = has('enters the battlefield') || /when .* enters/.test(o);
+  const blink = has('exile') && (has('return') || has('then return')) && (has('to the battlefield') || has('under its owner'));
+  const dies = has('dies') || /when .* dies/.test(o) || /whenever .* dies/.test(o);
+  const sacrifice = has('sacrifice');
+  const aristocrats = (dies || sacrifice) && (has('each opponent') || has('lose') || has('drain') || has('gain life'));
+  const proliferate = has('proliferate');
+  const plusCounters = has('+1/+1 counter') || has('+1/+1 counters');
+  const counters = plusCounters || proliferate || has('counter on') || has('counters on');
+  const graveyard = has('graveyard');
+  const reanimate = (has('return') && has('graveyard')) || has('reanimate');
+  const selfMill = has('mill') || has('surveil') || has('put the top') && has('into your graveyard');
+  const spellslinger = has('instant') || has('sorcery') || has('whenever you cast') || has('magecraft') || has('storm');
+  const copySpells = has('copy target') || has('copy that spell') || has('create a copy');
+  const costReduce = has('cost') && (has('less to cast') || has('costs {') && has('less'));
+  const equipment = tl.includes('equipment');
+  const aura = tl.includes('aura');
+  const artifacts = tl.includes('artifact') || has('artifact');
+  const enchantments = tl.includes('enchantment') || has('enchantment');
+  const lifegain = has('gain life') || has('lifelink') || kw.includes('lifelink');
+  const voltron = (equipment || aura) && (tl.includes('creature') || has('enchanted creature'));
+  const goWide = tokens || has('anthem') || has('creatures you control get');
+  const bigMana = has('add {') || treasure || has('double') && has('mana');
+  const manaSink = /{x}/.test(getManaCost(card).toLowerCase()) || has('pay') && has(':') && (has('draw') || has('create') || has('deal'));
+  const planeswalker = tl.includes('planeswalker');
+
+  // tribal detection (simple heuristic): "Creature — Elf Druid" => types after "—"
+  const tribal = tl.includes('creature') && tl.includes('—') && tl.split('—')[1]?.trim().length > 0;
+
+  return {
+    tokens,
+    treasure,
+    etb,
+    blink,
+    dies,
+    sacrifice,
+    aristocrats,
+    counters,
+    plusCounters,
+    proliferate,
+    graveyard,
+    reanimate,
+    selfMill,
+    spellslinger,
+    copySpells,
+    costReduce,
+    equipment,
+    aura,
+    artifacts,
+    enchantments,
+    lifegain,
+    voltron,
+    goWide,
+    bigMana,
+    manaSink,
+    tribal,
+    planeswalker,
+  };
+}
+
 function buildStandardSynergies(card: ScryfallCard): string {
-  const typeLine = getTypeLine(card).toLowerCase();
-  const oracle = getOracleText(card).toLowerCase();
   const tags = buildContextTags(card);
+  const m = detectMechanics(card);
 
   const themes: string[] = [];
   const pairs: string[] = [];
-  const infin: string[] = [];
+  const patterns: string[] = [];
   const avoid: string[] = [];
 
-  if (tags.includes('artifact')) themes.push('• Artifacts');
-  if (tags.includes('enchantment')) themes.push('• Enchantments');
-  if (tags.includes('instant') || tags.includes('sorcery') || tags.includes('cast-triggers')) themes.push('• Spellslinger (many instants/sorceries)');
-  if (tags.includes('tokens')) themes.push('• Token swarm / go-wide');
-  if (tags.includes('graveyard')) themes.push('• Graveyard / recursion');
-  if (tags.includes('sacrifice')) themes.push('• Sacrifice / aristocrats');
-  if (tags.includes('mana')) themes.push('• Ramp / big mana');
-  if (oracle.includes('lifelink') || oracle.includes('gain life')) themes.push('• Lifegain');
-
+  // Themes (more specific)
+  if (m.aristocrats) themes.push('• Aristocrats (sacrifice + death triggers)');
+  if (m.etb) themes.push('• ETB / Blink value');
+  if (m.counters) themes.push('• Counters / Proliferate');
+  if (m.spellslinger) themes.push('• Spellslinger / Cast triggers');
+  if (m.graveyard) themes.push('• Graveyard / recursion');
+  if (m.goWide) themes.push('• Go-wide tokens');
+  if (m.voltron) themes.push('• Voltron (stacking buffs on one creature)');
+  if (m.bigMana) themes.push('• Ramp / big mana');
+  if (m.planeswalker) themes.push('• Planeswalker support');
+  if (m.artifacts) themes.push('• Artifact synergies');
+  if (m.enchantments) themes.push('• Enchantment synergies');
+  if (m.tribal) themes.push('• Typal/tribal synergies (matching creature types)');
   if (themes.length === 0) themes.push('• General value / good-stuff');
 
-  if (tags.includes('mana')) {
-    pairs.push('• Big spells and expensive commanders (you reach them sooner).');
-    pairs.push('• Card draw (extra mana + extra cards = more options).');
-    pairs.push('• Mana sinks (activated abilities you can dump mana into).');
+  // Pairings (actionable, mechanic-based)
+  if (m.etb) {
+    pairs.push('• Blink/flicker effects (re-trigger ETB abilities for repeat value).');
+    pairs.push('• Bounce-your-own effects (return it to hand and replay for ETB again).');
+    patterns.push('• Pattern: resolve the ETB, then blink it on end step to do it again next turn.');
   }
-  if (tags.includes('card-draw')) {
-    pairs.push('• Cheap interaction (use extra cards to keep pace).');
-    pairs.push('• Cost reducers (cast more spells per turn).');
-    pairs.push('• “Whenever you draw” payoff cards (if your deck has them).');
+
+  if (m.dies || m.sacrifice) {
+    pairs.push('• Sacrifice outlets (free or repeatable ways to sacrifice creatures).');
+    pairs.push('• Death triggers (“when a creature dies” payoffs like drain/draw/tokens).');
+    pairs.push('• Token makers (cheap bodies to sacrifice).');
+    patterns.push('• Pattern: make tokens → sacrifice them → collect value from death triggers.');
   }
-  if (tags.includes('tokens')) {
-    pairs.push('• Anthem effects (make small tokens into real threats).');
-    pairs.push('• Sacrifice outlets (convert tokens into value).');
-    pairs.push('• ETB triggers (if tokens enter the battlefield often).');
+
+  if (m.aristocrats) {
+    pairs.push('• Life-drain payoffs and “each opponent loses life” effects (accelerates the win).');
+    pairs.push('• Recursion (bring back fodder creatures to sacrifice again).');
   }
+
+  if (m.plusCounters) {
+    pairs.push('• Counter doublers (make each counter effect bigger).');
+    pairs.push('• Proliferate (add extra counters without needing more triggers).');
+    patterns.push('• Pattern: add counters early → proliferate midgame → swing with oversized threats.');
+  }
+
+  if (m.proliferate) {
+    pairs.push('• Planeswalkers (proliferate grows loyalty fast).');
+    pairs.push('• Any counter strategy: +1/+1 counters, poison, sagas, charge counters.');
+    patterns.push('• Pattern: establish a counter source → proliferate to snowball advantage.');
+  }
+
+  if (m.graveyard) {
+    pairs.push('• Self-mill / discard outlets (put useful cards into your graveyard on purpose).');
+    pairs.push('• Reanimation / recursion (turn graveyard into extra “hand”).');
+    avoid.push('• Graveyard hate (exile-based effects) can shut this down—consider protection or backup plans.');
+  }
+
+  if (m.reanimate) {
+    pairs.push('• Big creatures/ETB creatures (reanimating a threat is strongest when it does something immediately).');
+    pairs.push('• Discard/self-mill (to “load” targets into the graveyard).');
+    patterns.push('• Pattern: bin a big threat → reanimate it → protect it for a full turn cycle.');
+  }
+
+  if (m.selfMill) {
+    pairs.push('• Recursion and reanimation payoffs (you’re filling the graveyard as a resource).');
+    pairs.push('• “Whenever a card goes to your graveyard” payoffs (if your deck has them).');
+  }
+
+  if (m.spellslinger) {
+    pairs.push('• Cheap cantrips and interaction (cast multiple spells per turn to trigger payoffs).');
+    pairs.push('• Cost reducers (lets you chain more spells in a turn).');
+    pairs.push('• Spell copy effects (copying a strong spell often wins games).');
+    patterns.push('• Pattern: hold mana → cast spells on opponents’ turns → keep triggering value engines.');
+  }
+
+  if (m.copySpells) {
+    pairs.push('• Big-impact instants/sorceries (copy your best spell for huge swings).');
+    pairs.push('• “Cast triggers” cards (copies often still count as spells on the stack).');
+  }
+
+  if (m.treasure) {
+    pairs.push('• “Artifacts matter” cards (Treasures are artifacts).');
+    pairs.push('• Big spells / mana sinks (Treasures convert into explosive turns).');
+    patterns.push('• Pattern: bank Treasures → spend them all for a big turn where you pull ahead.');
+  }
+
+  if (m.tokens && !m.treasure) {
+    pairs.push('• Anthem effects (make many small bodies into real threats).');
+    pairs.push('• Sac outlets (convert tokens into cards/mana/life).');
+    patterns.push('• Pattern: go wide → buff once → swing for big damage.');
+  }
+
+  if (m.equipment) {
+    pairs.push('• Creatures with evasion (flying/menace) or combat damage triggers.');
+    pairs.push('• “Voltron” commanders (one creature gets huge and ends games quickly).');
+    avoid.push('• Equipment can be slow if you don’t have creatures to equip—make sure you have enough bodies.');
+  }
+
+  if (m.aura) {
+    pairs.push('• Hexproof/ward/protection creatures (reduces the risk of getting 2-for-1’d).');
+    pairs.push('• Totem armor (if available in your colors) helps prevent blowouts.');
+    avoid.push('• Auras are fragile vs instant-speed removal—prefer casting when opponents are tapped out.');
+  }
+
+  if (m.lifegain) {
+    pairs.push('• “Whenever you gain life” payoffs (counters, tokens, draw, drain).');
+    pairs.push('• Repeatable lifegain sources (small gains each turn add up).');
+  }
+
+  if (m.bigMana) {
+    pairs.push('• Expensive commanders / big spells (you reach them sooner).');
+    pairs.push('• Mana sinks (activated abilities or X spells to dump extra mana).');
+    patterns.push('• Pattern: ramp early → stabilize midgame → win with a huge turn.');
+  }
+
+  if (m.manaSink) {
+    pairs.push('• Extra mana sources (ramp) so you can scale the ability/spell harder.');
+    pairs.push('• Untap effects (if it’s an activated ability) to use it multiple times.');
+  }
+
   if (tags.includes('removal')) {
-    pairs.push('• Board control shells (removal + card advantage).');
-    pairs.push('• Recursion (replay the removal if your deck can).');
+    pairs.push('• Card draw (removal + draw = you answer threats without running out of gas).');
+    pairs.push('• Recursion (replay removal effects if you can).');
   }
-  if (tags.includes('graveyard')) {
-    pairs.push('• Self-mill (fill your graveyard with options).');
-    pairs.push('• Sacrifice outlets (put things in the graveyard intentionally).');
-    pairs.push('• Reanimation / recursion spells (bring things back).');
-  }
-  if (typeLine.includes('equipment')) {
-    pairs.push('• Creatures with strong combat triggers (haste/evasion helps).');
-    pairs.push('• Cheap creatures (more targets for Equipment).');
-  }
-  if (pairs.length === 0) pairs.push('• Cards that share the same theme or resource (mana, tokens, graveyard, etc.).');
 
-  infin.push('• No specific infinite combo is suggested in free mode.');
-  infin.push('• If you enable AI later, the app can suggest more detailed combo patterns.');
+  if (tags.includes('countermagic')) {
+    pairs.push('• Draw engines (counterspells are best when you always have one available).');
+    pairs.push('• Cheap interaction suite (keep control without falling behind).');
+  }
 
-  if (oracle.includes('exile your graveyard') || oracle.includes('exile all cards from your graveyard')) {
-    avoid.push('• This can conflict with heavy graveyard strategies (you may remove your own resources).');
+  if (pairs.length === 0) {
+    pairs.push('• Cards that share the same resource (mana, cards, tokens) or strategy (tempo/value).');
+    patterns.push('• Pattern: use this card to gain advantage, then protect that advantage.');
   }
-  if (typeLine.includes('aura')) {
-    avoid.push('• Aura plans can be fragile if opponents have lots of instant-speed removal.');
-  }
-  if (tags.includes('mana') && oracle.includes('colorless')) {
-    avoid.push('• If your deck needs a lot of colored mana, pair this with good color fixing.');
-  }
+
   if (avoid.length === 0) avoid.push('• Avoid including this if it does not support your deck’s main plan.');
 
   return [
@@ -687,8 +785,8 @@ function buildStandardSynergies(card: ScryfallCard): string {
     `B) What this card pairs well with`,
     ...pairs,
     ``,
-    `C) If you want to go infinite (optional)`,
-    ...infin,
+    `C) Common synergy patterns (how it “plays out”)`,
+    ...(patterns.length ? patterns : ['• No special pattern detected—treat it as flexible value.']),
     ``,
     `D) Anti-synergies / what to avoid`,
     ...avoid,
@@ -836,72 +934,77 @@ const MANUAL_EXPLAINERS: Record<
   },
 };
 
-const MANUAL_KEYS = new Set(Object.keys(MANUAL_EXPLAINERS).map((k) => k.toLowerCase().trim()));
+const MANUAL_KEYS = new Set(Object.keys(MANUAL_EXPLAINERS).map((k) => normalizeName(k)));
 
+function asPlainTextWithBullets(s: string) {
+  return s
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n');
+}
+
+/**
+ * =========================
+ * Main Page
+ * =========================
+ */
 export default function Page() {
+  // search UI
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 
+  // selection
   const [selectedName, setSelectedName] = useState<string>('');
   const [card, setCard] = useState<ScryfallCard | null>(null);
   const [isLoadingCard, setIsLoadingCard] = useState(false);
 
+  // tabs
   const [activeTab, setActiveTab] = useState<'explain' | 'synergies' | 'glossary'>('explain');
 
-  const [standardExplanation, setStandardExplanation] = useState<string>('');
-  const [standardSynergies, setStandardSynergies] = useState<string>('');
-  const [aiExplanation, setAiExplanation] = useState<string>('');
-  const [aiSynergies, setAiSynergies] = useState<string>('');
+  // preferences
+  const [preferManual, setPreferManual] = useState(true);
 
-  const [isLoadingExplain, setIsLoadingExplain] = useState(false);
-  const [isLoadingSynergy, setIsLoadingSynergy] = useState(false);
-
-  const [notice, setNotice] = useState<string>('');
-
-  const [preferManualFirst, setPreferManualFirst] = useState(true);
+  // AI controls (hybrid)
+  const [enableAI, setEnableAI] = useState(false);
   const [autoFetchAI, setAutoFetchAI] = useState(false);
-  const [aiEnabled, setAiEnabled] = useState(false);
 
-  const [openTooltipId, setOpenTooltipId] = useState<string | null>(null);
+  // outputs
+  const [manualExplain, setManualExplain] = useState<string | null>(null);
+  const [standardExplain, setStandardExplain] = useState<string | null>(null);
+  const [standardSynergies, setStandardSynergies] = useState<string | null>(null);
 
+  const [aiExplain, setAiExplain] = useState<string | null>(null);
+  const [aiSynergies, setAiSynergies] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  // tooltips (Option A)
+  const [openKey, setOpenKey] = useState<string | null>(null);
+
+  // glossary
   const [glossaryQuery, setGlossaryQuery] = useState('');
 
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const manual = useMemo(() => {
-    const key = normalizeName(selectedName || query);
-    for (const name of Object.keys(MANUAL_EXPLAINERS)) {
-      if (normalizeName(name) === key) return MANUAL_EXPLAINERS[name];
-    }
-    return null;
-  }, [selectedName, query]);
-
-  const manualMatchIsExact = useMemo(() => {
-    if (!selectedName) return false;
-    return MANUAL_KEYS.has(normalizeName(selectedName));
-  }, [selectedName]);
-
+  // Close tooltip when clicking outside OR hitting ESC
   useEffect(() => {
-    function onDocMouseDown(e: MouseEvent) {
-      if (dropdownRef.current && dropdownRef.current.contains(e.target as Node)) return;
-      setShowDropdown(false);
-      setOpenTooltipId(null);
-    }
-    document.addEventListener('mousedown', onDocMouseDown);
-    return () => document.removeEventListener('mousedown', onDocMouseDown);
+    const onDocClick = () => setOpenKey(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenKey(null);
+    };
+    document.addEventListener('click', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
   }, []);
 
+  // Scryfall suggestions (autocomplete)
   useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpenTooltipId(null);
-    }
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, []);
-
-  useEffect(() => {
+    let alive = true;
     const q = query.trim();
     if (!q) {
       setSuggestions([]);
@@ -909,517 +1012,534 @@ export default function Page() {
       return;
     }
 
-    setIsSuggesting(true);
-    const handle = setTimeout(async () => {
+    const run = async () => {
+      setIsSuggesting(true);
       try {
-        const acRes = await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(q)}`);
-        const acJson = await safeJson(acRes);
-        const names: string[] = Array.isArray(acJson?.data) ? acJson.data.slice(0, 8) : [];
+        const url = `https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(q)}`;
+        const res = await fetch(url);
+        const data = await safeJson(res);
 
-        const cards: Suggestion[] = [];
-        for (const name of names) {
-          try {
-            const namedRes = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
-            const namedJson = (await safeJson(namedRes)) as ScryfallCard | null;
+        const names: string[] = Array.isArray(data?.data) ? data.data.slice(0, 8) : [];
+        const results: Suggestion[] = [];
 
-            cards.push({
-              id: namedJson?.id || name,
-              name,
-              image: namedJson ? getBestCardImage(namedJson) : null,
-              type_line: namedJson?.type_line || '',
-              mana_cost: namedJson?.mana_cost || '',
-            });
-          } catch {
-            cards.push({ id: name, name, image: null });
-          }
+        // Fetch a small amount of card data so we can show images in the dropdown
+        for (const name of names.slice(0, 6)) {
+          const r = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
+          const c = (await safeJson(r)) as ScryfallCard | null;
+          results.push({
+            id: c?.id ?? name,
+            name,
+            image: c?.image_uris?.small ?? c?.card_faces?.[0]?.image_uris?.small ?? null,
+            type_line: c?.type_line ?? c?.card_faces?.[0]?.type_line ?? undefined,
+            mana_cost: c?.mana_cost ?? c?.card_faces?.[0]?.mana_cost ?? undefined,
+          });
         }
 
-        setSuggestions(cards);
+        if (!alive) return;
+        setSuggestions(results);
         setShowDropdown(true);
       } catch {
+        if (!alive) return;
         setSuggestions([]);
+        setShowDropdown(false);
       } finally {
+        if (!alive) return;
         setIsSuggesting(false);
       }
-    }, 250);
+    };
 
-    return () => clearTimeout(handle);
+    const t = setTimeout(run, 160);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
   }, [query]);
 
   async function loadCardByName(name: string) {
     const n = name.trim();
     if (!n) return;
-
-    setNotice('');
-    setOpenTooltipId(null);
+    setSelectedName(n);
     setIsLoadingCard(true);
-    setCard(null);
-
-    setStandardExplanation('');
-    setStandardSynergies('');
-    setAiExplanation('');
-    setAiSynergies('');
-    setActiveTab('explain');
+    setAiError(null);
+    setAiExplain(null);
+    setAiSynergies(null);
 
     try {
       const res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(n)}`);
-      const json = (await safeJson(res)) as ScryfallCard | null;
+      const c = (await safeJson(res)) as ScryfallCard | null;
+      if (!c || !c.name) throw new Error('Card not found');
 
-      if (!res.ok || !json?.name) {
-        setNotice('Could not find that card on Scryfall. Check spelling and try again.');
-        setCard(null);
-        return;
+      setCard(c);
+
+      const norm = normalizeName(c.name);
+      const manual = MANUAL_KEYS.has(norm) ? MANUAL_EXPLAINERS[c.name]?.short ?? null : null;
+
+      // Manual block (more detailed) if present
+      if (MANUAL_KEYS.has(norm) && MANUAL_EXPLAINERS[c.name]) {
+        const m = MANUAL_EXPLAINERS[c.name];
+        const lines = [
+          `${m.title}`,
+          ``,
+          `${m.short}`,
+          ``,
+          `Why people play it`,
+          ...m.why.map((x) => `• ${x}`),
+          ``,
+          `Quick tips`,
+          ...m.tips.map((x) => `• ${x}`),
+          ...(m.gotchas?.length
+            ? [
+                ``,
+                `Gotchas`,
+                ...m.gotchas.map((x) => `• ${x}`),
+              ]
+            : []),
+        ];
+        setManualExplain(lines.join('\n'));
+      } else {
+        setManualExplain(null);
       }
 
-      setCard(json);
-      setStandardExplanation(buildStandardExplanation(json));
-      setStandardSynergies(buildStandardSynergies(json));
-    } catch {
-      setNotice('Network error while loading card data. Please try again.');
+      // Standard (free)
+      setStandardExplain(buildStandardExplanation(c));
+      setStandardSynergies(buildStandardSynergies(c));
+
+      // Auto-fetch AI if enabled
+      if (enableAI && autoFetchAI) {
+        if (activeTab === 'synergies') {
+          await fetchAI('synergies', c);
+        } else {
+          await fetchAI('explain', c);
+        }
+      }
+    } catch (e: any) {
       setCard(null);
+      setManualExplain(null);
+      setStandardExplain(null);
+      setStandardSynergies(null);
+      setAiError(e?.message ?? 'Failed to load card.');
     } finally {
       setIsLoadingCard(false);
+      setShowDropdown(false);
     }
   }
 
-  function onPickSuggestion(name: string) {
-    setSelectedName(name);
-    setQuery(name);
-    setShowDropdown(false);
-    loadCardByName(name);
-  }
-
-  async function onSearchSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const n = query.trim();
-    if (!n) return;
-    setSelectedName(n);
-    setShowDropdown(false);
-    await loadCardByName(n);
-  }
-
-  async function fetchAI(mode: 'explain' | 'synergies') {
-    if (!card) return;
-
-    if (!aiEnabled) {
-      setNotice('AI is turned off (free mode). You are seeing the standard explanation.');
-      return;
-    }
-
-    const payload = {
-      mode,
-      card: {
-        name: card.name,
-        mana_cost: getManaCost(card),
-        type_line: getTypeLine(card),
-        oracle_text: getOracleText(card),
-        keywords: card.keywords || [],
-        colors: card.colors || [],
-        color_identity: card.color_identity || [],
-        produced_mana: card.produced_mana || [],
-        cmc: card.cmc ?? null,
-        rarity: card.rarity ?? null,
-        set: card.set ?? null,
-        set_name: card.set_name ?? null,
-        tags: buildContextTags(card),
-      },
-      prefs: {
-        audience: 'beginner',
-        format: 'bulleted-with-sections',
-        concise: false,
-        commanderFocus: true,
-      },
-    };
-
-    if (mode === 'explain') setIsLoadingExplain(true);
-    else setIsLoadingSynergy(true);
-
-    setNotice('');
-
+  async function fetchAI(mode: 'explain' | 'synergies', c: ScryfallCard) {
+    setAiLoading(true);
+    setAiError(null);
     try {
+      const body = {
+        mode,
+        card: {
+          name: c.name,
+          mana_cost: getManaCost(c),
+          type_line: getTypeLine(c),
+          oracle_text: getOracleText(c),
+          tags: buildContextTags(c),
+        },
+      };
+
       const res = await fetch('/api/explain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       });
 
-      const json = await safeJson(res);
-
+      const data = await safeJson(res);
       if (!res.ok) {
-        const status = res.status;
-
-        if (status === 401) setNotice('AI is unavailable (invalid API key). Showing standard explanation instead.');
-        else if (status === 429) setNotice('AI is unavailable (quota/billing). This app can run free using the standard explanation.');
-        else setNotice('AI is unavailable right now. Showing standard explanation.');
-
-        return;
+        throw new Error(data?.error ?? 'AI request failed.');
       }
 
-      const text =
-        mode === 'explain'
-          ? (json?.explanation as string) || (json?.text as string) || ''
-          : (json?.synergies as string) || (json?.explanation as string) || (json?.text as string) || '';
+      const text = (data?.text ?? data?.explanation ?? data?.result ?? '').toString().trim();
+      if (!text) throw new Error('AI returned empty text.');
 
-      if (!text) {
-        setNotice('AI returned an empty response. Showing standard explanation.');
-        return;
-      }
-
-      if (mode === 'explain') setAiExplanation(text);
+      if (mode === 'explain') setAiExplain(text);
       else setAiSynergies(text);
-    } catch {
-      setNotice('Network error calling AI. Showing standard explanation.');
+    } catch (e: any) {
+      setAiError(e?.message ?? 'AI request failed.');
     } finally {
-      if (mode === 'explain') setIsLoadingExplain(false);
-      else setIsLoadingSynergy(false);
+      setAiLoading(false);
     }
   }
 
-  useEffect(() => {
-    if (!card) return;
-    if (!aiEnabled) return;
-    if (!autoFetchAI) return;
-    fetchAI('explain');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [card, aiEnabled, autoFetchAI]);
+  function onSearch() {
+    loadCardByName(query);
+  }
 
   const cardImage = useMemo(() => getBestCardImage(card), [card]);
   const oracleText = useMemo(() => getOracleText(card), [card]);
+  const typeLine = useMemo(() => getTypeLine(card), [card]);
+  const manaCost = useMemo(() => getManaCost(card), [card]);
+  const roleSpeed = useMemo(() => (card ? inferRoleAndSpeed(card) : null), [card]);
 
-  const showManual = Boolean(card && manual && (preferManualFirst || manualMatchIsExact));
-
-  const explainToShow = aiExplanation || standardExplanation;
-  const synergiesToShow = aiSynergies || standardSynergies;
-
-  const roleBadge = useMemo(() => (card ? deriveRole(card) : ''), [card]);
-  const speedBadge = useMemo(() => (card ? deriveSpeed(card) : ''), [card]);
+  const standardModeText = useMemo(() => {
+    if (!card) return null;
+    if (activeTab === 'synergies') return standardSynergies;
+    return standardExplain;
+  }, [card, activeTab, standardExplain, standardSynergies]);
 
   const filteredGlossary = useMemo(() => {
     const q = glossaryQuery.trim().toLowerCase();
     if (!q) return GLOSSARY;
-    return GLOSSARY.filter((g) => {
-      const hay = `${g.term} ${g.meaning} ${g.details ?? ''} ${(g.tags ?? []).join(' ')}`.toLowerCase();
+    return GLOSSARY.filter((item) => {
+      const hay = `${item.term} ${item.meaning} ${item.details ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase();
       return hay.includes(q);
     });
   }, [glossaryQuery]);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div ref={containerRef} className="min-h-screen bg-zinc-950 text-zinc-100">
       <div className="mx-auto max-w-6xl px-4 py-8">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        {/* Header */}
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Explain My Card</h1>
-            <p className="text-sm text-zinc-400">Search any Magic card. Get a clear explanation + beginner-friendly synergies.</p>
+            <h1 className="text-3xl font-bold tracking-tight">Explain My Card</h1>
+            <p className="mt-1 text-sm text-zinc-400">
+              Search any Magic card. Get a clear explanation + beginner-friendly synergies.
+            </p>
           </div>
 
-          <div className="flex flex-wrap gap-2 text-xs text-zinc-300">
-            <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2">
-              <input type="checkbox" className="accent-zinc-200" checked={preferManualFirst} onChange={(e) => setPreferManualFirst(e.target.checked)} />
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/30 px-3 py-2 text-xs">
+              <input
+                type="checkbox"
+                checked={preferManual}
+                onChange={(e) => setPreferManual(e.target.checked)}
+              />
               Prefer manual explainer first
             </label>
 
-            <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2">
+            <label className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/30 px-3 py-2 text-xs">
               <input
                 type="checkbox"
-                className="accent-zinc-200"
-                checked={aiEnabled}
+                checked={enableAI}
                 onChange={(e) => {
-                  const next = e.target.checked;
-                  setAiEnabled(next);
-                  if (!next) setNotice('AI turned off. Using standard explanation (free mode).');
-                  else setNotice('AI turned on. If billing/quota is not enabled, it will fall back to free mode.');
+                  setEnableAI(e.target.checked);
+                  if (!e.target.checked) {
+                    setAutoFetchAI(false);
+                    setAiExplain(null);
+                    setAiSynergies(null);
+                    setAiError(null);
+                  }
                 }}
               />
               Enable AI (optional)
             </label>
 
-            <label
-              className={cx(
-                'flex items-center gap-2 rounded-lg border px-3 py-2',
-                aiEnabled ? 'border-zinc-800 bg-zinc-900/40 text-zinc-300' : 'border-zinc-900 bg-zinc-950 text-zinc-600'
-              )}
-            >
-              <input type="checkbox" className="accent-zinc-200" checked={autoFetchAI} onChange={(e) => setAutoFetchAI(e.target.checked)} disabled={!aiEnabled} />
+            <label className={cx(
+              'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs',
+              enableAI ? 'border-zinc-800 bg-zinc-900/30' : 'border-zinc-900 bg-zinc-900/10 text-zinc-600'
+            )}>
+              <input
+                type="checkbox"
+                checked={autoFetchAI}
+                disabled={!enableAI}
+                onChange={(e) => setAutoFetchAI(e.target.checked)}
+              />
               Auto-fetch AI
             </label>
           </div>
         </div>
 
-        <div className="mt-6" ref={dropdownRef}>
-          <form onSubmit={onSearchSubmit} className="relative">
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <input
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setShowDropdown(true);
-                  }}
-                  onFocus={() => {
-                    if (suggestions.length) setShowDropdown(true);
-                  }}
-                  placeholder="Type a card name… (e.g., Sol Ring, Rhystic Study, Lightning Greaves)"
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-500 shadow-sm outline-none focus:border-zinc-600"
-                />
-
-                {showDropdown && (suggestions.length > 0 || isSuggesting) && (
-                  <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-xl">
-                    {isSuggesting && <div className="px-4 py-3 text-sm text-zinc-400">Searching…</div>}
-
-                    {!isSuggesting &&
-                      suggestions.map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => onPickSuggestion(s.name)}
-                          className="flex w-full items-center gap-3 border-b border-zinc-800 px-4 py-3 text-left hover:bg-zinc-800/50"
-                        >
-                          <div className="h-10 w-10 overflow-hidden rounded-lg bg-zinc-800">
-                            {s.image ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={s.image} alt={s.name} className="h-full w-full object-cover" />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-xs text-zinc-400">—</div>
-                            )}
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-medium text-zinc-100">{s.name}</div>
-                            <div className="truncate text-xs text-zinc-400">
-                              {s.mana_cost ? `${s.mana_cost} · ` : ''}
-                              {s.type_line || 'Card'}
-                            </div>
-                          </div>
-                        </button>
-                      ))}
+        {/* Search */}
+        <div className="relative mt-6">
+          <div className="flex gap-3">
+            <div className="relative flex-1">
+              <input
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setSelectedName('');
+                }}
+                onFocus={() => setShowDropdown(suggestions.length > 0)}
+                placeholder="Type a card name... (e.g., Sol Ring, Rhystic Study, Lightning Greaves)"
+                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/40 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-zinc-600"
+              />
+              {showDropdown && suggestions.length > 0 ? (
+                <div className="absolute z-40 mt-2 w-full overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-xl">
+                  {suggestions.map((s) => (
+                    <button
+                      key={s.id}
+                      className="flex w-full items-center gap-3 border-b border-zinc-900 px-3 py-2 text-left hover:bg-zinc-900/60"
+                      onClick={() => {
+                        setQuery(s.name);
+                        setShowDropdown(false);
+                        loadCardByName(s.name);
+                      }}
+                    >
+                      <div className="h-10 w-10 overflow-hidden rounded-lg bg-zinc-900">
+                        {s.image ? <img src={s.image} alt={s.name} className="h-full w-full object-cover" /> : null}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold">{s.name}</div>
+                        <div className="truncate text-xs text-zinc-400">
+                          {s.mana_cost ? <span className="mr-2">{s.mana_cost}</span> : null}
+                          {s.type_line ?? ''}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                  <div className="px-3 py-2 text-xs text-zinc-500">
+                    Tip: click a dropdown result to load instantly (best accuracy).
                   </div>
-                )}
-              </div>
-
-              <button type="submit" className="rounded-xl border border-zinc-800 bg-zinc-100 px-4 py-3 text-sm font-semibold text-zinc-900 hover:bg-white">
-                Search
-              </button>
+                </div>
+              ) : null}
             </div>
-          </form>
 
-          <div className="mt-2 text-xs text-zinc-500">Tip: Example play is now included in the standard (free) explanation.</div>
+            <button
+              onClick={onSearch}
+              className="rounded-2xl bg-zinc-100 px-5 py-3 text-sm font-semibold text-zinc-950 hover:bg-white"
+            >
+              Search
+            </button>
+          </div>
+
+          <div className="mt-2 text-xs text-zinc-500">
+            Tip: Example play is included in the standard (free) explanation.
+          </div>
         </div>
 
-        {notice ? <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 text-sm text-zinc-200">{notice}</div> : null}
+        {/* Main */}
+        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
+          {/* Card panel */}
+          <div className="lg:col-span-4">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-zinc-200">Card</h2>
+                {roleSpeed && card ? (
+                  <div className="flex gap-2">
+                    <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-[11px] text-zinc-200">
+                      Role: {roleSpeed.role}
+                    </span>
+                    <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-[11px] text-zinc-200">
+                      Speed: {roleSpeed.speed}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
 
-        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
-            <div className="text-sm font-semibold text-zinc-200">Card</div>
-
-            <div className="mt-3">
               {isLoadingCard ? (
-                <div className="space-y-3">
-                  <div className="h-6 w-2/3 rounded bg-zinc-800" />
-                  <div className="h-48 w-full rounded-xl bg-zinc-800" />
-                  <div className="h-4 w-full rounded bg-zinc-800" />
-                  <div className="h-4 w-5/6 rounded bg-zinc-800" />
+                <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+                  Loading card...
                 </div>
-              ) : card ? (
-                <div className="space-y-4">
-                  <div>
-                    <div className="text-lg font-semibold">{card.name}</div>
+              ) : !card ? (
+                <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+                  Search for a card to see it here.
+                </div>
+              ) : (
+                <>
+                  <div className="mt-4">
+                    <div className="text-xl font-bold">{card.name}</div>
                     <div className="mt-1 text-xs text-zinc-400">
-                      {getManaCost(card) ? <span className="mr-2">{getManaCost(card)}</span> : null}
-                      {getTypeLine(card)}
+                      {manaCost ? <span className="mr-2">{manaCost}</span> : null}
+                      {typeLine}
                     </div>
                   </div>
 
                   {cardImage ? (
-                    <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={cardImage} alt={card.name} className="h-auto w-full object-cover" />
+                    <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950">
+                      <img src={cardImage} alt={card.name} className="w-full object-cover" />
                     </div>
-                  ) : (
-                    <div className="flex h-64 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-sm text-zinc-500">
-                      No image available
-                    </div>
-                  )}
+                  ) : null}
 
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                  <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
                     <div className="text-xs font-semibold text-zinc-300">Oracle text (plain)</div>
-                    <pre className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">{oracleText || 'No oracle text found.'}</pre>
+                    <pre className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">{oracleText || '—'}</pre>
                   </div>
-                </div>
-              ) : (
-                <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">Search for a card to see it here.</div>
+                </>
               )}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="text-sm font-semibold text-zinc-200">Explanation</div>
-                <div className="text-xs text-zinc-500">Tooltips show here (not in oracle text).</div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('explain')}
-                  className={cx(
-                    'rounded-xl border px-3 py-2 text-xs font-semibold',
-                    activeTab === 'explain'
-                      ? 'border-zinc-200 bg-zinc-100 text-zinc-900'
-                      : 'border-zinc-800 bg-zinc-950 text-zinc-200 hover:bg-zinc-900'
-                  )}
-                >
-                  Explain
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('synergies')}
-                  className={cx(
-                    'rounded-xl border px-3 py-2 text-xs font-semibold',
-                    activeTab === 'synergies'
-                      ? 'border-zinc-200 bg-zinc-100 text-zinc-900'
-                      : 'border-zinc-800 bg-zinc-950 text-zinc-200 hover:bg-zinc-900'
-                  )}
-                  disabled={!card}
-                  title={!card ? 'Search a card first' : 'Show synergies'}
-                >
-                  Synergies
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('glossary')}
-                  className={cx(
-                    'rounded-xl border px-3 py-2 text-xs font-semibold',
-                    activeTab === 'glossary'
-                      ? 'border-zinc-200 bg-zinc-100 text-zinc-900'
-                      : 'border-zinc-800 bg-zinc-950 text-zinc-200 hover:bg-zinc-900'
-                  )}
-                >
-                  Glossary
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => fetchAI('explain')}
-                  disabled={!card || isLoadingExplain}
-                  className={cx(
-                    'rounded-xl border px-3 py-2 text-xs font-semibold',
-                    !card || isLoadingExplain
-                      ? 'cursor-not-allowed border-zinc-800 bg-zinc-950 text-zinc-500'
-                      : 'border-zinc-800 bg-zinc-950 text-zinc-200 hover:bg-zinc-900'
-                  )}
-                  title={!card ? 'Search a card first' : 'Try AI (optional)'}
-                >
-                  {isLoadingExplain ? 'Trying…' : 'Try AI'}
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-4">
-              {activeTab === 'explain' && (
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4" onClick={() => setOpenTooltipId(null)}>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-zinc-100">{aiExplanation ? 'AI-enhanced explanation' : 'Standard explanation (free)'}</div>
-                      <div className="text-xs text-zinc-500">{aiExplanation ? 'Generated by AI (when available).' : 'Generated locally from oracle text + simple rules.'}</div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      {card ? (
-                        <>
-                          <div className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs text-zinc-200">Role: {roleBadge}</div>
-                          <div className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs text-zinc-200">{speedBadge}</div>
-                        </>
-                      ) : null}
-                      <div className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs text-zinc-300">{aiExplanation ? 'AI on' : 'Free mode'}</div>
-                    </div>
-                  </div>
-
-                  {!card ? (
-                    <div className="mt-3 text-sm text-zinc-400">Search a card to generate an explanation.</div>
-                  ) : (
-                    <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
-                      {renderTextWithTooltips(explainToShow || 'No explanation available yet.', openTooltipId, setOpenTooltipId)}
-                    </pre>
-                  )}
+          {/* Explanation panel */}
+          <div className="lg:col-span-8">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4 shadow-sm">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold text-zinc-200">Explanation</h2>
+                  <div className="text-xs text-zinc-500">Tooltips show here (not in oracle text).</div>
                 </div>
-              )}
 
-              {activeTab === 'synergies' && (
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4" onClick={() => setOpenTooltipId(null)}>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <div className="text-sm font-semibold text-zinc-100">{aiSynergies ? 'AI-enhanced synergies' : 'Standard synergies (free)'}</div>
-                      <div className="text-xs text-zinc-500">{aiSynergies ? 'Generated by AI (when available).' : 'Generated locally from oracle text + simple rules.'}</div>
-                    </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    className={cx(
+                      'rounded-full px-4 py-2 text-xs font-semibold',
+                      activeTab === 'explain'
+                        ? 'bg-zinc-100 text-zinc-950'
+                        : 'border border-zinc-800 bg-zinc-950 text-zinc-200 hover:bg-zinc-900/60'
+                    )}
+                    onClick={() => setActiveTab('explain')}
+                  >
+                    Explain
+                  </button>
+                  <button
+                    className={cx(
+                      'rounded-full px-4 py-2 text-xs font-semibold',
+                      activeTab === 'synergies'
+                        ? 'bg-zinc-100 text-zinc-950'
+                        : 'border border-zinc-800 bg-zinc-950 text-zinc-200 hover:bg-zinc-900/60'
+                    )}
+                    onClick={() => setActiveTab('synergies')}
+                  >
+                    Synergies
+                  </button>
+                  <button
+                    className={cx(
+                      'rounded-full px-4 py-2 text-xs font-semibold',
+                      activeTab === 'glossary'
+                        ? 'bg-zinc-100 text-zinc-950'
+                        : 'border border-zinc-800 bg-zinc-950 text-zinc-200 hover:bg-zinc-900/60'
+                    )}
+                    onClick={() => setActiveTab('glossary')}
+                  >
+                    Glossary
+                  </button>
 
+                  {enableAI ? (
                     <button
-                      type="button"
-                      onClick={() => fetchAI('synergies')}
-                      disabled={!card || isLoadingSynergy}
                       className={cx(
-                        'rounded-xl border px-3 py-2 text-xs font-semibold',
-                        !card || isLoadingSynergy
-                          ? 'cursor-not-allowed border-zinc-800 bg-zinc-900/40 text-zinc-500'
-                          : 'border-zinc-800 bg-zinc-900 text-zinc-100 hover:bg-zinc-800/60'
+                        'rounded-full px-4 py-2 text-xs font-semibold',
+                        'border border-zinc-800 bg-zinc-950 text-zinc-200 hover:bg-zinc-900/60'
                       )}
+                      onClick={() => {
+                        if (!card) return;
+                        if (activeTab === 'synergies') fetchAI('synergies', card);
+                        else fetchAI('explain', card);
+                      }}
+                      disabled={!card || aiLoading}
                     >
-                      {isLoadingSynergy ? 'Trying…' : 'Try AI synergies'}
+                      {activeTab === 'synergies' ? 'Try AI synergies' : 'Try AI'}
                     </button>
-                  </div>
-
-                  {!card ? (
-                    <div className="mt-3 text-sm text-zinc-400">Search a card first.</div>
-                  ) : (
-                    <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
-                      {renderTextWithTooltips(synergiesToShow || 'No synergies available yet.', openTooltipId, setOpenTooltipId)}
-                    </pre>
-                  )}
+                  ) : null}
                 </div>
-              )}
+              </div>
 
-              {activeTab === 'glossary' && (
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <div className="text-sm font-semibold text-zinc-100">Glossary</div>
-                      <div className="text-xs text-zinc-500">Includes abilities + acronyms + slang.</div>
-                    </div>
+              {/* AI error */}
+              {aiError ? (
+                <div className="mt-3 rounded-2xl border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-200">
+                  {aiError}
+                </div>
+              ) : null}
 
-                    <div className="w-full sm:w-72">
-                      <input
-                        value={glossaryQuery}
-                        onChange={(e) => setGlossaryQuery(e.target.value)}
-                        placeholder="Search glossary… (e.g., deathtouch, ETB, ramp)"
-                        className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-zinc-600"
-                      />
-                    </div>
+              {/* Content */}
+              {activeTab === 'glossary' ? (
+                <div className="mt-4">
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={glossaryQuery}
+                      onChange={(e) => setGlossaryQuery(e.target.value)}
+                      placeholder="Search glossary... (e.g., ETB, trample, removal)"
+                      className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-zinc-600"
+                    />
                   </div>
 
-                  <div className="mt-4 grid grid-cols-1 gap-3">
+                  <div className="mt-3 max-h-[520px] overflow-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-3">
                     {filteredGlossary.length === 0 ? (
-                      <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 text-sm text-zinc-300">No matches. Try a different search.</div>
+                      <div className="p-3 text-sm text-zinc-400">No glossary matches.</div>
                     ) : (
-                      filteredGlossary.map((g) => (
-                        <div key={g.term} className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
-                          <div className="flex flex-wrap items-baseline justify-between gap-2">
-                            <div className="text-sm font-semibold text-zinc-100">{g.term}</div>
-                            <div className="text-xs text-zinc-300">{g.meaning}</div>
+                      <div className="space-y-2">
+                        {filteredGlossary.map((g) => (
+                          <div key={g.term} className="rounded-xl border border-zinc-900 bg-zinc-950 p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="text-sm font-semibold text-zinc-100">{g.term}</div>
+                              <div className="text-xs text-zinc-400">{g.meaning}</div>
+                            </div>
+                            {g.details ? (
+                              <div className="mt-2 text-sm text-zinc-200">{g.details}</div>
+                            ) : null}
+                            {g.tags?.length ? (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {g.tags.map((t) => (
+                                  <span
+                                    key={t}
+                                    className="rounded-full border border-zinc-800 bg-zinc-900/30 px-2 py-0.5 text-[11px] text-zinc-300"
+                                  >
+                                    {t}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
-                          {g.details ? <div className="mt-2 text-sm text-zinc-200">{g.details}</div> : null}
-                          {g.tags?.length ? <div className="mt-2 text-xs text-zinc-500">Tags: {g.tags.join(', ')}</div> : null}
-                        </div>
-                      ))
+                        ))}
+                      </div>
                     )}
                   </div>
-                </div>
-              )}
-            </div>
 
-            <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-500">
-              Tip: Click a highlighted word in Explanation/Synergies for a definition. Press Escape to close tooltips.
+                  <div className="mt-2 text-xs text-zinc-500">
+                    Tip: Glossary includes abilities (deathtouch, flying, trample, etc.) plus acronyms (ETB/MV) and slang (ramp, board wipe).
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Manual / Standard header */}
+                  <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-zinc-100">
+                            {activeTab === 'synergies' ? 'Standard synergies (free)' : 'Standard explanation (free)'}
+                          </div>
+                          <div className="text-xs text-zinc-400">Generated locally from oracle text + simple rules.</div>
+                        </div>
+                        <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-[11px] text-zinc-200">
+                          Free mode
+                        </span>
+                      </div>
+
+                      <div className="mt-3">
+                        {!card ? (
+                          <div className="text-sm text-zinc-400">Search a card to generate {activeTab === 'synergies' ? 'synergies' : 'an explanation'}.</div>
+                        ) : (
+                          <pre className="whitespace-pre-wrap text-sm text-zinc-100">
+                            {renderTextWithTooltips(asPlainTextWithBullets(standardModeText ?? ''), openKey, setOpenKey)}
+                          </pre>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-zinc-100">AI {activeTab === 'synergies' ? 'synergies' : 'explanation'}</div>
+                          <div className="text-xs text-zinc-400">Optional: richer + more specific (requires API credits).</div>
+                        </div>
+                        <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-[11px] text-zinc-200">
+                          {enableAI ? 'AI enabled' : 'AI off'}
+                        </span>
+                      </div>
+
+                      <div className="mt-3">
+                        {!enableAI ? (
+                          <div className="text-sm text-zinc-500">Enable AI to use this. Free mode is always available.</div>
+                        ) : aiLoading ? (
+                          <div className="text-sm text-zinc-400">Loading AI…</div>
+                        ) : (
+                          <pre className="whitespace-pre-wrap text-sm text-zinc-100">
+                            {activeTab === 'synergies'
+                              ? aiSynergies || 'No AI synergies yet. Click “Try AI synergies”.'
+                              : aiExplain || 'No AI explanation yet. Click “Try AI”.'}
+                          </pre>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Manual explainer (if present) */}
+                  {card && manualExplain && (preferManual || activeTab === 'explain') ? (
+                    <div className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                      <div className="text-sm font-semibold text-zinc-100">Manual explainer (staples)</div>
+                      <div className="mt-2 text-xs text-zinc-400">
+                        For common staples you’ll see a human-written explainer here. AI is optional for extra detail.
+                      </div>
+                      <pre className="mt-3 whitespace-pre-wrap text-sm text-zinc-100">{manualExplain}</pre>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-500">
+                    Tip: Click a highlighted word in Explanation/Synergies for a definition. Press Escape to close tooltips.
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
