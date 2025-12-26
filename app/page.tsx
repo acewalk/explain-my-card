@@ -296,19 +296,9 @@ type GlossaryItem = {
   tags?: string[];
 };
 
-const GLOSSARY: GlossaryItem[] = [
-  {
-    term: 'ETB',
-    meaning: 'Enters the Battlefield',
-    details: 'Triggered abilities that happen when a permanent enters the battlefield.',
-    tags: ['trigger', 'battlefield'],
-  },
-  {
-    term: 'LTB',
-    meaning: 'Leaves the Battlefield',
-    details: 'Triggered abilities that happen when a permanent leaves the battlefield (dies, exiled, bounced, etc.).',
-    tags: ['trigger', 'battlefield'],
-  },
+const GLOSSARY_BASE: GlossaryItem[] = [
+  { term: 'ETB', meaning: 'Enters the Battlefield', details: 'Triggered abilities that happen when a permanent enters the battlefield.', tags: ['trigger', 'battlefield'] },
+  { term: 'LTB', meaning: 'Leaves the Battlefield', details: 'Triggered abilities that happen when a permanent leaves the battlefield (dies, exiled, bounced, etc.).', tags: ['trigger', 'battlefield'] },
   { term: 'Dies', meaning: 'Goes from battlefield to graveyard', details: '“Dies” specifically means it went to a graveyard from the battlefield.', tags: ['rules'] },
   { term: 'CMC', meaning: 'Converted Mana Cost (older term)', details: 'Modern rules usually say “Mana Value (MV)”. They mean the same thing.', tags: ['mana'] },
   { term: 'MV', meaning: 'Mana Value', details: 'A number representing the total mana cost (ignores color). Example: {2}{U} has MV 3.', tags: ['mana'] },
@@ -333,10 +323,96 @@ const GLOSSARY: GlossaryItem[] = [
   { term: 'Aristocrats', meaning: 'Sacrifice-for-value strategy', details: 'Uses sacrifice outlets + death triggers to drain life or gain value.', tags: ['strategy'] },
   { term: 'Go wide', meaning: 'Many creatures', details: 'Win by building lots of small creatures/tokens and buffing them.', tags: ['strategy'] },
   { term: 'Go tall', meaning: 'One huge threat', details: 'Win by building one creature very large (auras, counters, equipment).', tags: ['strategy'] },
+  { term: 'Politics', meaning: 'Multiplayer negotiation', details: 'Commander often involves deals, threats, and targeting decisions.', tags: ['commander'] },
   { term: 'Commander tax', meaning: 'Extra cost to recast commander', details: 'Each time you cast your commander from the command zone, it costs {2} more for each previous time.', tags: ['commander'] },
   { term: 'Stack', meaning: 'Where spells/abilities wait to resolve', details: 'Players can respond while things are on the stack (instants/abilities).', tags: ['rules'] },
   { term: 'Priority', meaning: 'Who can act right now', details: 'Only a player with priority can cast a spell or activate most abilities.', tags: ['rules'] },
 ];
+
+// Which tooltip terms should ALSO appear in the Glossary?
+// (This includes your “abilities” like deathtouch/reach/etc.)
+const GLOSSARY_INCLUDE_TOOLTIP_TERMS = new Set([
+  // Abilities / keyword abilities
+  'first strike',
+  'double strike',
+  'trample',
+  'menace',
+  'flying',
+  'reach',
+  'vigilance',
+  'haste',
+  'deathtouch',
+  'lifelink',
+  'ward',
+  'hexproof',
+  'shroud',
+  'indestructible',
+  'protection',
+  'flash',
+
+  // Keyword actions / mechanics (still common to learn)
+  'convoke',
+  'delve',
+  'kicker',
+  'cascade',
+  'cycling',
+  'equip',
+  'enchant',
+
+  // Common rules words that are super useful
+  'destroy',
+  'exile',
+  'graveyard',
+  'scry',
+  'surveil',
+  'mill',
+  'counter',
+  'token',
+
+  // Commander/common concepts
+  'ramp',
+  'commander',
+  'board wipe',
+  'mana value',
+  'target',
+  'targets',
+  'removal',
+
+  // Symbols
+  '{T}',
+  '{C}',
+]);
+
+function makeGlossaryFromTooltips(): GlossaryItem[] {
+  const out: GlossaryItem[] = [];
+  for (const [term, def] of Object.entries(KEYWORD_DEFINITIONS)) {
+    if (!GLOSSARY_INCLUDE_TOOLTIP_TERMS.has(term)) continue;
+
+    // If the definition looks like "Term: description..." split it
+    const idx = def.indexOf(':');
+    const meaning = idx > 0 ? def.slice(0, idx).trim() : term;
+    const details = idx > 0 ? def.slice(idx + 1).trim() : def.trim();
+
+    out.push({
+      term,
+      meaning,
+      details,
+      tags: GLOSSARY_INCLUDE_TOOLTIP_TERMS.has(term) ? ['keyword/ability'] : undefined,
+    });
+  }
+  return out;
+}
+
+function mergeGlossaries(a: GlossaryItem[], b: GlossaryItem[]): GlossaryItem[] {
+  const map = new Map<string, GlossaryItem>();
+  for (const item of [...a, ...b]) {
+    const key = item.term.toLowerCase().trim();
+    if (!map.has(key)) map.set(key, item);
+  }
+  return Array.from(map.values()).sort((x, y) => x.term.localeCompare(y.term));
+}
+
+const GLOSSARY: GlossaryItem[] = mergeGlossaries(GLOSSARY_BASE, makeGlossaryFromTooltips());
 
 async function safeJson(res: Response) {
   try {
@@ -1044,8 +1120,7 @@ export default function Page() {
           </form>
 
           <div className="mt-2 text-xs text-zinc-500">
-            Tip: try searching <span className="font-semibold text-zinc-200">Sol Ring</span> — you should see highlighted words like <span className="font-semibold text-zinc-200">ramp</span>,{' '}
-            <span className="font-semibold text-zinc-200">mana value</span>, etc.
+            Tip: Glossary now includes <span className="font-semibold text-zinc-200">abilities</span> (deathtouch, flying, trample, etc.) plus acronyms (ETB/MV) and slang (ramp, board wipe).
           </div>
         </div>
 
@@ -1223,14 +1298,14 @@ export default function Page() {
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <div className="text-sm font-semibold text-zinc-100">Glossary</div>
-                      <div className="text-xs text-zinc-500">Common Magic acronyms, abbreviations, and shorthand.</div>
+                      <div className="text-xs text-zinc-500">Includes abilities (deathtouch, flying, etc.) + acronyms + slang.</div>
                     </div>
 
                     <div className="w-full sm:w-72">
                       <input
                         value={glossaryQuery}
                         onChange={(e) => setGlossaryQuery(e.target.value)}
-                        placeholder="Search glossary… (e.g., ETB, MV, ramp)"
+                        placeholder="Search glossary… (e.g., deathtouch, ETB, ramp)"
                         className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-zinc-600"
                       />
                     </div>
