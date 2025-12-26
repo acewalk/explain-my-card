@@ -114,6 +114,8 @@ function buildContextTags(card: ScryfallCard | null): string[] {
   if (t.includes('instant')) tags.push('instant');
   if (t.includes('sorcery')) tags.push('sorcery');
   if (t.includes('land')) tags.push('land');
+  if (t.includes('equipment')) tags.push('equipment');
+  if (t.includes('aura')) tags.push('aura');
 
   if (o.includes('draw a card') || o.includes('draw two') || o.includes('draw three') || o.includes('draw')) tags.push('card-draw');
   if (o.includes('treasure')) tags.push('treasure');
@@ -133,12 +135,65 @@ function buildContextTags(card: ScryfallCard | null): string[] {
 
 /**
  * =========================
+ * Role + Speed (FREE, deterministic)
+ * =========================
+ */
+function deriveRole(card: ScryfallCard): string {
+  const tags = buildContextTags(card);
+  const typeLine = getTypeLine(card).toLowerCase();
+  const oracle = getOracleText(card).toLowerCase();
+
+  // Priority order (most “what people mean” first)
+  if (tags.includes('countermagic')) return 'Counterspell';
+  if (tags.includes('removal')) return 'Removal';
+  if (tags.includes('mana') || tags.includes('treasure')) return 'Ramp';
+  if (tags.includes('card-draw')) return 'Card Draw';
+  if (tags.includes('tutor-or-search')) return 'Tutor';
+  if (tags.includes('tokens')) return 'Token Maker';
+  if (tags.includes('graveyard')) return 'Graveyard / Recursion';
+  if (tags.includes('sacrifice')) return 'Sacrifice / Aristocrats';
+
+  if (typeLine.includes('planeswalker')) return 'Planeswalker';
+  if (typeLine.includes('equipment')) return 'Equipment';
+  if (typeLine.includes('aura')) return 'Aura';
+  if (typeLine.includes('land')) return 'Land / Utility';
+  if (typeLine.includes('creature')) {
+    if (oracle.includes('whenever') || oracle.includes('at the beginning') || tags.includes('etb')) return 'Value Creature';
+    return 'Creature';
+  }
+
+  return 'Utility / Value';
+}
+
+function deriveSpeed(card: ScryfallCard): string {
+  const t = getTypeLine(card).toLowerCase();
+  const o = getOracleText(card).toLowerCase();
+
+  // Most correct, simplest heuristics
+  if (t.includes('instant')) return 'Instant-speed';
+  if (o.includes('flash')) return 'Instant-speed (Flash)';
+
+  // Activated abilities can be instant-speed unless restricted, but we keep it beginner-simple:
+  // If card is not an instant / flash, we call it “Sorcery-speed” as a default.
+  return 'Sorcery-speed';
+}
+
+function deriveSpeedHint(card: ScryfallCard): string {
+  const t = getTypeLine(card).toLowerCase();
+  const o = getOracleText(card).toLowerCase();
+
+  if (t.includes('instant')) return 'You can cast this anytime you have priority (including in response).';
+  if (o.includes('flash')) return 'Flash means you can cast it like an instant.';
+  return 'Usually cast on your turn during a main phase (unless it’s an activated ability).';
+}
+
+/**
+ * =========================
  * Keyword tooltips (FREE)
  * Tooltips show ONLY in Explanation/Synergies (not oracle text)
  * =========================
  */
 const KEYWORD_DEFINITIONS: Record<string, string> = {
-  // Common “section words” that appear in explanations
   removal: 'Removal: Cards or effects that answer threats by destroying, exiling, bouncing, or otherwise neutralizing them.',
   target:
     'Target: If something says “target,” you choose it when you cast/activate. If the target becomes illegal, the spell/ability may fizzle (fail to resolve).',
@@ -148,7 +203,6 @@ const KEYWORD_DEFINITIONS: Record<string, string> = {
     'Commander: A multiplayer format. You build a 100-card deck around a legendary creature (your commander) and start at 40 life.',
   'board wipe': 'Board wipe: A spell that removes many permanents at once (often all creatures). Example: Wrath of God.',
 
-  // Combat keywords
   'first strike': 'First strike: This creature deals combat damage before creatures without first strike.',
   'double strike': 'Double strike: This creature deals combat damage twice (first strike damage and regular damage).',
   trample:
@@ -161,7 +215,6 @@ const KEYWORD_DEFINITIONS: Record<string, string> = {
   deathtouch: 'Deathtouch: Any amount of damage this creature deals to another creature is lethal.',
   lifelink: 'Lifelink: Damage dealt by this creature also causes you to gain that much life.',
 
-  // Protection / targeting
   ward:
     'Ward: When this becomes the target of a spell or ability an opponent controls, counter it unless that opponent pays the ward cost (if any).',
   hexproof: 'Hexproof: This permanent cannot be the target of spells or abilities your opponents control.',
@@ -170,7 +223,6 @@ const KEYWORD_DEFINITIONS: Record<string, string> = {
   protection:
     'Protection: Prevents certain damage, targeting, blocking, and enchanting/equipping based on the stated quality (e.g., “protection from red”).',
 
-  // Casting / costs
   flash: 'Flash: You may cast this spell any time you could cast an instant.',
   convoke:
     'Convoke: Your creatures can help pay for this spell. Each creature you tap pays for {1} or one mana of that creature’s color.',
@@ -180,7 +232,6 @@ const KEYWORD_DEFINITIONS: Record<string, string> = {
     'Cascade: When you cast this spell, exile cards from the top until you exile a nonland card with lower mana value. You may cast it for free.',
   cycling: 'Cycling: You may pay a cost and discard this card to draw a card.',
 
-  // Common rules words + concepts
   equip: 'Equip: Pay the equip cost to attach the Equipment to a creature you control (normally only as a sorcery).',
   enchant: 'Enchant: This Aura targets something as you cast it and attaches to that kind of object when it resolves.',
   sacrifice:
@@ -199,11 +250,9 @@ const KEYWORD_DEFINITIONS: Record<string, string> = {
   counter: 'Counter: Remove a spell from the stack so it does not resolve (usually goes to the graveyard).',
   token: 'Token: A game object that represents a permanent but is not a card.',
 
-  // Symbols often used in explanations
   '{T}': 'Tap symbol: Tap this permanent to pay this cost.',
   '{C}': 'Colorless mana: This is colorless (not “any color”).',
 
-  // Commander/common slang
   ramp: 'Ramp: Any way to increase your mana faster than playing one land per turn (rocks, extra lands, dorks).',
   synergy: 'Synergy: Cards that work well together and make each other stronger.',
   'mana value': 'Mana value (MV): The total cost of a spell as a number. Example {2}{U} has MV 3.',
@@ -215,8 +264,7 @@ function escapeRegex(s: string) {
 
 /**
  * OPTION A FIX:
- * We track the OPEN TOOLTIP by a UNIQUE ID per occurrence (not by the word).
- * That means only ONE “target” tooltip opens — the one you clicked.
+ * Track the OPEN TOOLTIP by a UNIQUE ID per occurrence (not by the word).
  */
 function renderTextWithTooltips(
   text: string,
@@ -239,7 +287,6 @@ function renderTextWithTooltips(
       const keyMatch = keys.find((k) => k.toLowerCase() === part.toLowerCase());
       if (!keyMatch) return <React.Fragment key={`${lineIdx}-${idx}`}>{part}</React.Fragment>;
 
-      // Unique per occurrence (word + position)
       const occurrenceId = `${keyMatch}__${lineIdx}-${idx}`;
       const isOpen = openId === occurrenceId;
       const definition = KEYWORD_DEFINITIONS[keyMatch];
@@ -418,6 +465,7 @@ async function safeJson(res: Response) {
 
 /**
  * FREE, deterministic "Standard explanation"
+ * Now includes Role + Speed + Example Play.
  */
 function buildStandardExplanation(card: ScryfallCard): string {
   const typeLine = getTypeLine(card);
@@ -429,25 +477,37 @@ function buildStandardExplanation(card: ScryfallCard): string {
   const tl = typeLine.toLowerCase();
   const o = oracle.toLowerCase();
 
+  const role = deriveRole(card);
+  const speed = deriveSpeed(card);
+  const speedHint = deriveSpeedHint(card);
+
   const what: string[] = [];
   const why: string[] = [];
   const patterns: string[] = [];
   const gotchas: string[] = [];
   const tips: string[] = [];
+  const example: string[] = [];
 
-  if (tags.includes('mana') || (tl.includes('artifact') && o.includes('{t}: add'))) what.push('• Helps you produce mana, so you can cast spells sooner.');
-  if (tags.includes('card-draw')) what.push('• Helps you draw extra cards (more options each turn).');
+  // A) Quick header lines
+  what.push(`• Role: ${role}`);
+  what.push(`• Speed: ${speed} — ${speedHint}`);
+
+  // B) What it does
+  if (tags.includes('mana') || (tl.includes('artifact') && o.includes('{t}: add'))) what.push('• Ramp: helps you produce mana, so you can cast spells sooner.');
+  if (tags.includes('card-draw')) what.push('• Card Draw: helps you draw extra cards (more options each turn).');
   if (tags.includes('removal')) what.push('• Removal: it answers a threat (often by destroying or exiling).');
-  if (tags.includes('tokens')) what.push('• Creates tokens, which can build a board quickly.');
+  if (tags.includes('tokens')) what.push('• Tokens: creates tokens, which can build a board quickly.');
   if (tags.includes('countermagic')) what.push('• Counter: it can stop an opponent’s spell so it does not resolve.');
-  if (tags.includes('graveyard')) what.push('• Interacts with the graveyard (yours or opponents’).');
-  if (tags.includes('tutor-or-search')) what.push('• Tutor: lets you search your library for a card or land (increases consistency).');
-  if (tl.includes('creature') && (card.power || card.toughness)) what.push(`• It is a creature (${card.power ?? '?'} / ${card.toughness ?? '?'}). It can attack and block.`);
-  if (tl.includes('planeswalker')) what.push('• It is a planeswalker. You activate one loyalty ability per turn (on your turn).');
+  if (tags.includes('graveyard')) what.push('• Graveyard: interacts with the graveyard (yours or opponents’).');
+  if (tags.includes('tutor-or-search')) what.push('• Tutor: lets you search your library for a card or land (consistency).');
+  if (tl.includes('creature') && (card.power || card.toughness)) what.push(`• Creature: (${card.power ?? '?'} / ${card.toughness ?? '?'}) — it can attack and block.`);
+  if (tl.includes('planeswalker')) what.push('• Planeswalker: you activate one loyalty ability per turn (on your turn).');
 
-  if (what.length === 0) what.push(oracle.trim() ? '• This card’s main effect is described in its oracle text below.' : '• This card does not have oracle text (or it was not available from Scryfall).');
+  if (what.length === 0)
+    what.push(oracle.trim() ? '• This card’s main effect is described in its oracle text below.' : '• This card does not have oracle text (or it was not available from Scryfall).');
 
-  if (tags.includes('mana')) {
+  // C) Why people play it
+  if (tags.includes('mana') || tags.includes('treasure')) {
     why.push('• Ramp is strong in Commander because games often revolve around big turns.');
     patterns.push('• Play it early if possible, then use the extra mana immediately.');
     tips.push('• Early ramp is usually more valuable than late ramp.');
@@ -485,7 +545,8 @@ function buildStandardExplanation(card: ScryfallCard): string {
     tips.push('• Try to tutor with a plan: “What am I doing the next 2 turns?”');
   }
 
-  if (o.includes('exile')) gotchas.push('• Exile is different from destroy: it usually prevents most death triggers and recursion.');
+  // D) General gotchas
+  if (o.includes('exile')) gotchas.push('• Exile is different from destroy: it often prevents recursion and many death triggers.');
   if (o.includes('until end of turn')) gotchas.push('• “Until end of turn” effects wear off at the end of the turn.');
   if (tl.includes('equipment')) {
     gotchas.push('• Equipment must be attached by paying its equip cost (normally only as a sorcery).');
@@ -503,6 +564,27 @@ function buildStandardExplanation(card: ScryfallCard): string {
   if (cmc !== null && cmc >= 6) tips.push('• This is a higher-cost card. Decks usually want ramp or cost reduction to cast it reliably.');
   if (manaCost && manaCost.includes('{X}')) tips.push('• X is chosen as you cast the spell, and it affects the total mana you pay.');
 
+  // E) Example play (new!)
+  if (role === 'Removal') {
+    example.push('• Example: An opponent attacks with a scary creature. You cast this before damage to remove it, saving life and stopping future attacks.');
+    example.push('• Example: An opponent is about to combo with a key creature/permanent. You remove it right before it matters.');
+  } else if (role === 'Counterspell') {
+    example.push('• Example: Opponent casts a board wipe. You counter it to protect your board and keep your advantage.');
+    example.push('• Example: Opponent casts a combo piece. You counter it while it’s on the stack (before it resolves).');
+  } else if (role === 'Ramp') {
+    example.push('• Example: You play this early (turn 1–3). Next turn, you have extra mana to cast your commander sooner.');
+    example.push('• Example: You use the extra mana to cast two spells in one turn (develop + interact).');
+  } else if (role === 'Card Draw') {
+    example.push('• Example: You cast this when you have spare mana, drawing into lands/removal so you don’t run out of options.');
+    example.push('• Example: After a board wipe, you draw extra cards to rebuild faster than opponents.');
+  } else if (role === 'Token Maker') {
+    example.push('• Example: You make tokens over a few turns, then attack with a wide board once you have enough bodies.');
+    example.push('• Example: You use tokens to block (defense) or sacrifice them for value (if your deck does that).');
+  } else {
+    example.push('• Example: You play this when it helps your plan right now (protecting something, gaining value, or setting up the next turn).');
+    example.push('• Example: You wait until it creates immediate impact instead of playing it “just because you can.”');
+  }
+
   const ensure = (arr: string[], fallback: string) => {
     if (arr.length === 0) arr.push(`• ${fallback}`);
   };
@@ -510,6 +592,7 @@ function buildStandardExplanation(card: ScryfallCard): string {
   ensure(patterns, 'Read the oracle text and look for the best timing window (early, mid, or late game).');
   ensure(gotchas, 'No major special rules notes beyond normal Magic rules.');
   ensure(tips, 'If you are unsure, ask: “What problem does this card solve for me right now?”');
+  ensure(example, '• Example: Think about what you want to happen next turn, then use this card to move toward that plan.');
 
   return [
     `1) What this card does`,
@@ -526,6 +609,9 @@ function buildStandardExplanation(card: ScryfallCard): string {
     ``,
     `5) Quick tips`,
     ...tips,
+    ``,
+    `6) Example play`,
+    ...example,
   ].join('\n');
 }
 
@@ -778,7 +864,6 @@ export default function Page() {
   const [autoFetchAI, setAutoFetchAI] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
 
-  // ✅ Option A: track the unique occurrence id (not the keyword itself)
   const [openTooltipId, setOpenTooltipId] = useState<string | null>(null);
 
   const [glossaryQuery, setGlossaryQuery] = useState('');
@@ -1006,6 +1091,9 @@ export default function Page() {
   const explainToShow = aiExplanation || standardExplanation;
   const synergiesToShow = aiSynergies || standardSynergies;
 
+  const roleBadge = useMemo(() => (card ? deriveRole(card) : ''), [card]);
+  const speedBadge = useMemo(() => (card ? deriveSpeed(card) : ''), [card]);
+
   const filteredGlossary = useMemo(() => {
     const q = glossaryQuery.trim().toLowerCase();
     if (!q) return GLOSSARY;
@@ -1114,9 +1202,7 @@ export default function Page() {
             </div>
           </form>
 
-          <div className="mt-2 text-xs text-zinc-500">
-            Tip: Glossary includes <span className="font-semibold text-zinc-200">abilities</span> (deathtouch, flying, trample, etc.) plus acronyms (ETB/MV) and slang (ramp, board wipe).
-          </div>
+          <div className="mt-2 text-xs text-zinc-500">Tip: Example play is now included in the standard (free) explanation.</div>
         </div>
 
         {notice ? <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 text-sm text-zinc-200">{notice}</div> : null}
@@ -1160,9 +1246,7 @@ export default function Page() {
                   </div>
                 </div>
               ) : (
-                <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
-                  Search for a card to see it here.
-                </div>
+                <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">Search for a card to see it here.</div>
               )}
             </div>
           </div>
@@ -1236,13 +1320,21 @@ export default function Page() {
             <div className="mt-4 space-y-4">
               {activeTab === 'explain' && (
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4" onClick={() => setOpenTooltipId(null)}>
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-zinc-100">{aiExplanation ? 'AI-enhanced explanation' : 'Standard explanation (free)'}</div>
                       <div className="text-xs text-zinc-500">{aiExplanation ? 'Generated by AI (when available).' : 'Generated locally from oracle text + simple rules.'}</div>
                     </div>
 
-                    <div className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs text-zinc-300">{aiExplanation ? 'AI on' : 'Free mode'}</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {card ? (
+                        <>
+                          <div className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs text-zinc-200">Role: {roleBadge}</div>
+                          <div className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs text-zinc-200">{speedBadge}</div>
+                        </>
+                      ) : null}
+                      <div className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs text-zinc-300">{aiExplanation ? 'AI on' : 'Free mode'}</div>
+                    </div>
                   </div>
 
                   {!card ? (
@@ -1293,7 +1385,7 @@ export default function Page() {
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <div className="text-sm font-semibold text-zinc-100">Glossary</div>
-                      <div className="text-xs text-zinc-500">Includes abilities (deathtouch, flying, etc.) + acronyms + slang.</div>
+                      <div className="text-xs text-zinc-500">Includes abilities + acronyms + slang.</div>
                     </div>
 
                     <div className="w-full sm:w-72">
