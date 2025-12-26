@@ -134,9 +134,21 @@ function buildContextTags(card: ScryfallCard | null): string[] {
 /**
  * =========================
  * Keyword tooltips (FREE)
+ * Tooltips show ONLY in Explanation/Synergies (not oracle text)
  * =========================
  */
 const KEYWORD_DEFINITIONS: Record<string, string> = {
+  // Common “section words” that appear in explanations
+  removal: 'Removal: Cards or effects that answer threats by destroying, exiling, bouncing, or otherwise neutralizing them.',
+  target:
+    'Target: If something says “target,” you choose it when you cast/activate. If the target becomes illegal, the spell/ability may fizzle (fail to resolve).',
+  targets:
+    'Targets: Same as “target.” You must choose legal targets. If they become illegal, the spell/ability may fail.',
+  commander:
+    'Commander: A multiplayer format. You build a 100-card deck around a legendary creature (your commander) and start at 40 life.',
+  'board wipe': 'Board wipe: A spell that removes many permanents at once (often all creatures). Example: Wrath of God.',
+
+  // Combat keywords
   'first strike': 'First strike: This creature deals combat damage before creatures without first strike.',
   'double strike': 'Double strike: This creature deals combat damage twice (first strike damage and regular damage).',
   trample:
@@ -148,6 +160,8 @@ const KEYWORD_DEFINITIONS: Record<string, string> = {
   haste: 'Haste: This creature can attack and use {T} abilities the turn it enters the battlefield.',
   deathtouch: 'Deathtouch: Any amount of damage this creature deals to another creature is lethal.',
   lifelink: 'Lifelink: Damage dealt by this creature also causes you to gain that much life.',
+
+  // Protection / targeting
   ward:
     'Ward: When this becomes the target of a spell or ability an opponent controls, counter it unless that opponent pays the ward cost (if any).',
   hexproof: 'Hexproof: This permanent cannot be the target of spells or abilities your opponents control.',
@@ -155,6 +169,8 @@ const KEYWORD_DEFINITIONS: Record<string, string> = {
   indestructible: 'Indestructible: This permanent cannot be destroyed by damage or “destroy” effects.',
   protection:
     'Protection: Prevents certain damage, targeting, blocking, and enchanting/equipping based on the stated quality (e.g., “protection from red”).',
+
+  // Casting / costs
   flash: 'Flash: You may cast this spell any time you could cast an instant.',
   convoke:
     'Convoke: Your creatures can help pay for this spell. Each creature you tap pays for {1} or one mana of that creature’s color.',
@@ -163,12 +179,18 @@ const KEYWORD_DEFINITIONS: Record<string, string> = {
   cascade:
     'Cascade: When you cast this spell, exile cards from the top until you exile a nonland card with lower mana value. You may cast it for free.',
   cycling: 'Cycling: You may pay a cost and discard this card to draw a card.',
+
+  // Common rules words + concepts
   equip: 'Equip: Pay the equip cost to attach the Equipment to a creature you control (normally only as a sorcery).',
   enchant: 'Enchant: This Aura targets something as you cast it and attaches to that kind of object when it resolves.',
   sacrifice:
     'Sacrifice: Move a permanent you control to its owner’s graveyard. This is not “destroy,” and it does not target unless it says target.',
   exile:
     'Exile: Move a card to the exile zone. It is not in the graveyard, and many recursion effects cannot get it back.',
+  destroy:
+    'Destroy: Puts a permanent into the graveyard. This can be stopped by indestructible or regeneration (if applicable).',
+  graveyard:
+    'Graveyard: Where cards go when they die, are discarded, or are milled. Many decks use the graveyard as a resource.',
   mill: 'Mill: Put cards from the top of a library into a graveyard.',
   scry:
     'Scry: Look at that many cards from the top of your library, then put any number on the bottom and the rest on top.',
@@ -176,6 +198,15 @@ const KEYWORD_DEFINITIONS: Record<string, string> = {
     'Surveil: Look at that many cards from the top of your library, then put any number into your graveyard and the rest back on top.',
   counter: 'Counter: Remove a spell from the stack so it does not resolve (usually goes to the graveyard).',
   token: 'Token: A game object that represents a permanent but is not a card.',
+
+  // Symbols often used in explanations
+  '{T}': 'Tap symbol: Tap this permanent to pay this cost.',
+  '{C}': 'Colorless mana: This is colorless (not “any color”).',
+
+  // Commander/common slang
+  ramp: 'Ramp: Any way to increase your mana faster than playing one land per turn (rocks, extra lands, dorks).',
+  synergy: 'Synergy: Cards that work well together and make each other stronger.',
+  'mana value': 'Mana value (MV): The total cost of a spell as a number. Example {2}{U} has MV 3.',
 };
 
 function escapeRegex(s: string) {
@@ -191,8 +222,9 @@ function renderTextWithTooltips(
 
   const keys = Object.keys(KEYWORD_DEFINITIONS).sort((a, b) => b.length - a.length);
   const pattern = keys.map((k) => escapeRegex(k)).join('|');
-  const re = new RegExp(`(${pattern})`, 'gi');
+  if (!pattern) return text;
 
+  const re = new RegExp(`(${pattern})`, 'gi');
   const lines = text.split('\n');
 
   return lines.map((line, lineIdx) => {
@@ -211,9 +243,10 @@ function renderTextWithTooltips(
             type="button"
             className={cx(
               'mx-0.5 rounded px-1 py-0.5 text-left font-semibold',
-              'underline decoration-zinc-600 underline-offset-2',
-              'hover:bg-zinc-800/60 focus:outline-none focus:ring-2 focus:ring-zinc-500',
-              'text-zinc-100'
+              // stronger visual so you NOTICE the highlight
+              'bg-zinc-900/60 text-zinc-50',
+              'underline decoration-zinc-300 underline-offset-2',
+              'hover:bg-zinc-800/80 focus:outline-none focus:ring-2 focus:ring-zinc-500'
             )}
             aria-expanded={isOpen}
             aria-label={`${keyMatch} definition`}
@@ -228,7 +261,7 @@ function renderTextWithTooltips(
 
           <span
             className={cx(
-              'pointer-events-none absolute left-0 top-full z-50 mt-2 w-[min(320px,80vw)]',
+              'pointer-events-none absolute left-0 top-full z-50 mt-2 w-[min(360px,86vw)]',
               'rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 shadow-xl',
               'transition-opacity',
               isOpen ? 'opacity-100' : 'opacity-0'
@@ -334,18 +367,18 @@ function buildStandardExplanation(card: ScryfallCard): string {
 
   if (tags.includes('mana') || (tl.includes('artifact') && o.includes('{t}: add'))) what.push('• Helps you produce mana, so you can cast spells sooner.');
   if (tags.includes('card-draw')) what.push('• Helps you draw extra cards (more options each turn).');
-  if (tags.includes('removal')) what.push('• Removes or answers a threat (often by destroying or exiling).');
-  if (tags.includes('tokens')) what.push('• Creates creature tokens or other tokens, which can build a board quickly.');
-  if (tags.includes('countermagic')) what.push('• Can stop an opponent’s spell by countering it (it does not resolve).');
+  if (tags.includes('removal')) what.push('• Removal: it answers a threat (often by destroying or exiling).');
+  if (tags.includes('tokens')) what.push('• Creates tokens, which can build a board quickly.');
+  if (tags.includes('countermagic')) what.push('• Counter: it can stop an opponent’s spell so it does not resolve.');
   if (tags.includes('graveyard')) what.push('• Interacts with the graveyard (yours or opponents’).');
-  if (tags.includes('tutor-or-search')) what.push('• Lets you search your library for a card or land (increases consistency).');
+  if (tags.includes('tutor-or-search')) what.push('• Tutor: lets you search your library for a card or land (increases consistency).');
   if (tl.includes('creature') && (card.power || card.toughness)) what.push(`• It is a creature (${card.power ?? '?'} / ${card.toughness ?? '?'}). It can attack and block.`);
   if (tl.includes('planeswalker')) what.push('• It is a planeswalker. You activate one loyalty ability per turn (on your turn).');
 
   if (what.length === 0) what.push(oracle.trim() ? '• This card’s main effect is described in its oracle text below.' : '• This card does not have oracle text (or it was not available from Scryfall).');
 
   if (tags.includes('mana')) {
-    why.push('• Mana acceleration is strong in Commander because games often revolve around big turns.');
+    why.push('• Ramp is strong in Commander because games often revolve around big turns.');
     patterns.push('• Play it early if possible, then use the extra mana immediately.');
     tips.push('• Early ramp is usually more valuable than late ramp.');
   }
@@ -356,8 +389,9 @@ function buildStandardExplanation(card: ScryfallCard): string {
   }
   if (tags.includes('removal')) {
     why.push('• Commander is threat-dense; efficient removal keeps you from losing to one problem card.');
-    patterns.push('• Hold it for the most dangerous threat, not the first creature you see.');
+    patterns.push('• Hold removal for the most dangerous threat, not the first creature you see.');
     gotchas.push('• Check what it can target (creature only vs any permanent, etc.).');
+    gotchas.push('• This card targets. If the target becomes illegal, the effect may fail.');
     tips.push('• Save removal for cards that will beat you soon or enable a combo.');
   }
   if (tags.includes('countermagic')) {
@@ -378,12 +412,11 @@ function buildStandardExplanation(card: ScryfallCard): string {
   if (tags.includes('tutor-or-search')) {
     why.push('• Searching makes your deck more consistent (finds the right card for the situation).');
     patterns.push('• Decide what you need next turn (answer vs win condition) before you search.');
-    tips.push('• Try to tutor with a plan: “What am I doing for the next 2 turns?”');
+    tips.push('• Try to tutor with a plan: “What am I doing the next 2 turns?”');
   }
 
-  if (o.includes('target')) gotchas.push('• This card targets. If the target becomes illegal, the effect may fail.');
   if (o.includes('exile')) gotchas.push('• Exile is different from destroy: it usually prevents most death triggers and recursion.');
-  if (o.includes('until end of turn')) gotchas.push('• “Until end of turn” effects wear off during the cleanup step at the end of the turn.');
+  if (o.includes('until end of turn')) gotchas.push('• “Until end of turn” effects wear off at the end of the turn.');
   if (tl.includes('equipment')) {
     gotchas.push('• Equipment must be attached by paying its equip cost (normally only as a sorcery).');
     tips.push('• Equip is not the same as casting the Equipment.');
@@ -705,6 +738,14 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpenTooltipKey(null);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  useEffect(() => {
     const q = query.trim();
     if (!q) {
       setSuggestions([]);
@@ -1002,7 +1043,10 @@ export default function Page() {
             </div>
           </form>
 
-          <div className="mt-2 text-xs text-zinc-500">Tip: keywords like “trample” or “exile” are clickable.</div>
+          <div className="mt-2 text-xs text-zinc-500">
+            Tip: try searching <span className="font-semibold text-zinc-200">Sol Ring</span> — you should see highlighted words like <span className="font-semibold text-zinc-200">ramp</span>,{' '}
+            <span className="font-semibold text-zinc-200">mana value</span>, etc.
+          </div>
         </div>
 
         {notice ? <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 text-sm text-zinc-200">{notice}</div> : null}
@@ -1041,10 +1085,8 @@ export default function Page() {
                   )}
 
                   <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-                    <div className="text-xs font-semibold text-zinc-300">Oracle text</div>
-                    <pre className="mt-2 whitespace-pre-wrap text-sm text-zinc-200" onClick={() => setOpenTooltipKey(null)}>
-                      {renderTextWithTooltips(oracleText || 'No oracle text found.', openTooltipKey, setOpenTooltipKey)}
-                    </pre>
+                    <div className="text-xs font-semibold text-zinc-300">Oracle text (plain)</div>
+                    <pre className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">{oracleText || 'No oracle text found.'}</pre>
                   </div>
                 </div>
               ) : (
@@ -1059,7 +1101,7 @@ export default function Page() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="text-sm font-semibold text-zinc-200">Explanation</div>
-                <div className="text-xs text-zinc-500">Manual for staples + standard (free) for everything + optional AI enhancement.</div>
+                <div className="text-xs text-zinc-500">Tooltips show here (not in oracle text).</div>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -1121,53 +1163,6 @@ export default function Page() {
               </div>
             </div>
 
-            {showManual ? (
-              <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-zinc-100">Manual explainer</div>
-                    <div className="mt-1 text-xs text-zinc-500">{manual!.title}</div>
-                  </div>
-                  <div className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                    Staples library
-                  </div>
-                </div>
-
-                <div className="mt-3 text-sm text-zinc-200">{manual!.short}</div>
-
-                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
-                    <div className="text-xs font-semibold text-zinc-200">Why people play it</div>
-                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-200">
-                      {manual!.why.map((x, i) => (
-                        <li key={i}>{x}</li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
-                    <div className="text-xs font-semibold text-zinc-200">Tips</div>
-                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-200">
-                      {manual!.tips.map((x, i) => (
-                        <li key={i}>{x}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                {manual!.gotchas?.length ? (
-                  <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
-                    <div className="text-xs font-semibold text-zinc-200">Gotchas</div>
-                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-200">
-                      {manual!.gotchas.map((x, i) => (
-                        <li key={i}>{x}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
             <div className="mt-4 space-y-4">
               {activeTab === 'explain' && (
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4" onClick={() => setOpenTooltipKey(null)}>
@@ -1177,9 +1172,7 @@ export default function Page() {
                       <div className="text-xs text-zinc-500">{aiExplanation ? 'Generated by AI (when available).' : 'Generated locally from oracle text + simple rules.'}</div>
                     </div>
 
-                    <div className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                      {aiExplanation ? 'AI on' : 'Free mode'}
-                    </div>
+                    <div className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs text-zinc-300">{aiExplanation ? 'AI on' : 'Free mode'}</div>
                   </div>
 
                   {!card ? (
@@ -1264,7 +1257,7 @@ export default function Page() {
             </div>
 
             <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-500">
-              Tip: Keyword tooltips are for rule words (trample/ward/exile). Glossary is for shorthand (ETB/MV/ramp).
+              Tip: Click a highlighted word in Explanation/Synergies for a definition. Press Escape to close tooltips.
             </div>
           </div>
         </div>
