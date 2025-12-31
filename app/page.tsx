@@ -236,7 +236,6 @@ function renderTextWithTooltips(
             }}
             onClick={(e) => {
               e.stopPropagation();
-              // Toggle pin
               const next = pinnedKey === matchKey ? null : matchKey;
               setPinnedKey(next);
               setOpenKey(null);
@@ -271,9 +270,7 @@ function renderTextWithTooltips(
             role="tooltip"
           >
             <span className="block text-zinc-100">{definition}</span>
-            <span className="mt-1 block text-[11px] text-zinc-400">
-              Hover = preview • Click = pin • Esc = close
-            </span>
+            <span className="mt-1 block text-[11px] text-zinc-400">Hover = preview • Click = pin • Esc = close</span>
           </span>
         </span>
       );
@@ -372,7 +369,6 @@ function buildStandardExplanation(card: ScryfallCard): string {
 
   if (what.length === 0) what.push(oracle.trim() ? '• This card’s main effect is described in its oracle text below.' : '• This card does not have oracle text (or it was not available from Scryfall).');
 
-  // Commander framing (still free)
   why.push('• In Commander, cards that create value, tempo, or answers tend to perform well over long games.');
 
   if (tags.includes('mana')) patterns.push('• Play it early if possible, then use the extra mana immediately.');
@@ -461,7 +457,6 @@ function buildStandardSynergies(card: ScryfallCard): string {
   if (typeLine.includes('equipment')) {
     pairs.push('• Creatures with strong combat triggers (haste/evasion helps).');
     pairs.push('• Cheap creatures (more targets for Equipment).');
-    pairs.push('• These highlight keywords like equip.');
   }
   if (pairs.length === 0) pairs.push('• Cards that share the same theme or resource (mana, tokens, graveyard, etc.).');
 
@@ -565,8 +560,6 @@ const MANUAL_EXPLAINERS: Record<
   },
 };
 
-const MANUAL_KEYS = new Set(Object.keys(MANUAL_EXPLAINERS).map((k) => k.toLowerCase().trim()));
-
 /**
  * =========================
  * Premium Split (Commander)
@@ -598,7 +591,14 @@ type CommanderSection = {
   premium: boolean;
 };
 
-function buildSolRingCommanderSections(): { snapshot: CommanderSnapshot; summary: string; free: CommanderSection[]; paid: CommanderSection[] } {
+type CommanderSplit = {
+  snapshot: CommanderSnapshot;
+  summary: string;
+  free: CommanderSection[];
+  paid: CommanderSection[];
+};
+
+function buildSolRingCommanderSections(): CommanderSplit {
   const snapshot: CommanderSnapshot = {
     role: 'Ramp',
     speed: 'Early',
@@ -709,7 +709,7 @@ function buildSolRingCommanderSections(): { snapshot: CommanderSnapshot; summary
   return { snapshot, summary, free, paid };
 }
 
-function buildRhysticStudyCommanderSections(): { snapshot: CommanderSnapshot; summary: string; free: CommanderSection[]; paid: CommanderSection[] } {
+function buildRhysticStudyCommanderSections(): CommanderSplit {
   const snapshot: CommanderSnapshot = {
     role: 'Card advantage / Tax',
     speed: 'Early–Mid',
@@ -830,12 +830,27 @@ function buildRhysticStudyCommanderSections(): { snapshot: CommanderSnapshot; su
   return { snapshot, summary, free, paid };
 }
 
-function isSolRing(name: string) {
-  return normalizeName(name) === 'sol ring';
+/**
+ * =========================
+ * Commander Split Registry (REFactor)
+ * =========================
+ * Add new staple splits here:
+ *  - key = normalizeName(cardName)
+ *  - value = function that returns the split sections
+ */
+const COMMANDER_SPLIT_BUILDERS: Record<string, () => CommanderSplit> = {
+  [normalizeName('Sol Ring')]: buildSolRingCommanderSections,
+  [normalizeName('Rhystic Study')]: buildRhysticStudyCommanderSections,
+};
+
+function getCommanderSplitForCardName(name: string): CommanderSplit | null {
+  const key = normalizeName(name);
+  const builder = COMMANDER_SPLIT_BUILDERS[key];
+  return builder ? builder() : null;
 }
 
-function isRhysticStudy(name: string) {
-  return normalizeName(name) === 'rhystic study';
+function isCommanderSplitCard(name: string): boolean {
+  return Boolean(COMMANDER_SPLIT_BUILDERS[normalizeName(name)]);
 }
 
 /**
@@ -879,7 +894,6 @@ export default function Page() {
         setShowDropdown(false);
       }
 
-      // Clicking anywhere closes tooltips unless pinned (if pinned, click outside unpins too)
       if (pinnedKey) {
         setPinnedKey(null);
       }
@@ -903,12 +917,10 @@ export default function Page() {
       try {
         setIsSuggesting(true);
 
-        // Scryfall autocomplete (fast names)
         const res = await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(q)}`);
         const data = (await safeJson(res)) as any;
         const names: string[] = Array.isArray(data?.data) ? data.data.slice(0, 10) : [];
 
-        // Show quick list immediately (names only)
         const quick: Suggestion[] = names.map((name) => ({
           id: `name:${name}`,
           name,
@@ -921,7 +933,6 @@ export default function Page() {
           setShowDropdown(true);
         }
 
-        // Enrich in background (images/type/mana). Don’t block UI.
         const enriched = await Promise.all(
           names.map(async (name) => {
             try {
@@ -976,9 +987,8 @@ export default function Page() {
       // Manual explainer fallback
       const manual = MANUAL_EXPLAINERS[data.name];
       if (manual) {
-        // For Sol Ring + Rhystic Study, we use the new Commander split UI (handled in render)
-        // For others, keep existing manual text behavior
-        if (!isSolRing(data.name) && !isRhysticStudy(data.name)) {
+        // If this card is in the Commander Split registry, explanation is rendered from structured sections
+        if (!isCommanderSplitCard(data.name)) {
           const manualText = [
             `Manual Explainer: ${manual.title}`,
             '',
@@ -993,14 +1003,12 @@ export default function Page() {
           ].join('\n');
           setExplanation(manualText);
         } else {
-          setExplanation(''); // Structured sections render these cards
+          setExplanation('');
         }
       } else {
-        // Deterministic standard explanation for everyone else
         setExplanation(buildStandardExplanation(data));
       }
 
-      // Synergies: if manual, still show standard synergies (unless we later make manual synergies)
       setSynergies(buildStandardSynergies(data));
     } catch {
       setCard(null);
@@ -1064,11 +1072,8 @@ export default function Page() {
   const manaCost = useMemo(() => getManaCost(card), [card]);
   const tags = useMemo(() => buildContextTags(card), [card]);
 
-  const solRingSections = useMemo(() => (card && isSolRing(card.name) ? buildSolRingCommanderSections() : null), [card]);
-  const rhysticSections = useMemo(
-    () => (card && isRhysticStudy(card.name) ? buildRhysticStudyCommanderSections() : null),
-    [card]
-  );
+  // ✅ One generic split lookup (this is the refactor)
+  const commanderSplit = useMemo(() => (card ? getCommanderSplitForCardName(card.name) : null), [card]);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -1251,36 +1256,36 @@ export default function Page() {
                     <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
                       Search for a card to see an explanation.
                     </div>
-                  ) : solRingSections ? (
+                  ) : commanderSplit ? (
                     <>
                       {/* Snapshot */}
                       <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
                         <div className="mb-2 text-sm font-semibold text-zinc-200">Commander Snapshot (Free)</div>
                         <div className="flex flex-wrap gap-2 text-xs">
                           <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-200">
-                            Role: {solRingSections.snapshot.role}
+                            Role: {commanderSplit.snapshot.role}
                           </span>
                           <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-200">
-                            Speed: {solRingSections.snapshot.speed}
+                            Speed: {commanderSplit.snapshot.speed}
                           </span>
                           <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-200">
-                            Complexity: {solRingSections.snapshot.complexity}
+                            Complexity: {commanderSplit.snapshot.complexity}
                           </span>
-                          {solRingSections.snapshot.tableImpact && (
+                          {commanderSplit.snapshot.tableImpact && (
                             <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-200">
-                              Table Impact: {solRingSections.snapshot.tableImpact}
+                              Table Impact: {commanderSplit.snapshot.tableImpact}
                             </span>
                           )}
                         </div>
 
                         <div className="mt-4">
                           <div className="mb-2 text-sm font-semibold text-zinc-200">One-sentence summary (Free)</div>
-                          <p className="text-sm leading-relaxed text-zinc-200">{solRingSections.summary}</p>
+                          <p className="text-sm leading-relaxed text-zinc-200">{commanderSplit.summary}</p>
                         </div>
                       </div>
 
                       {/* Free sections */}
-                      {solRingSections.free.map((sec) => (
+                      {commanderSplit.free.map((sec) => (
                         <div key={sec.id} className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
                           <div className="mb-2 flex items-center justify-between gap-3">
                             <div className="text-sm font-semibold text-zinc-200">{sec.title}</div>
@@ -1318,86 +1323,7 @@ export default function Page() {
                           </div>
                         ) : (
                           <div className="space-y-4">
-                            {solRingSections.paid.map((sec) => (
-                              <div key={sec.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                                <div className="mb-2 text-sm font-semibold text-zinc-200">{sec.title}</div>
-                                <pre className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
-                                  {renderTextWithTooltips(sec.body, hoverKey, setHoverKey, pinnedKey, setPinnedKey)}
-                                </pre>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  ) : rhysticSections ? (
-                    <>
-                      {/* Snapshot */}
-                      <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-                        <div className="mb-2 text-sm font-semibold text-zinc-200">Commander Snapshot (Free)</div>
-                        <div className="flex flex-wrap gap-2 text-xs">
-                          <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-200">
-                            Role: {rhysticSections.snapshot.role}
-                          </span>
-                          <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-200">
-                            Speed: {rhysticSections.snapshot.speed}
-                          </span>
-                          <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-200">
-                            Complexity: {rhysticSections.snapshot.complexity}
-                          </span>
-                          {rhysticSections.snapshot.tableImpact && (
-                            <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-200">
-                              Table Impact: {rhysticSections.snapshot.tableImpact}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="mt-4">
-                          <div className="mb-2 text-sm font-semibold text-zinc-200">One-sentence summary (Free)</div>
-                          <p className="text-sm leading-relaxed text-zinc-200">{rhysticSections.summary}</p>
-                        </div>
-                      </div>
-
-                      {/* Free sections */}
-                      {rhysticSections.free.map((sec) => (
-                        <div key={sec.id} className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-                          <div className="mb-2 flex items-center justify-between gap-3">
-                            <div className="text-sm font-semibold text-zinc-200">{sec.title}</div>
-                            <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300">
-                              Free
-                            </span>
-                          </div>
-                          <pre className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
-                            {renderTextWithTooltips(sec.body, hoverKey, setHoverKey, pinnedKey, setPinnedKey)}
-                          </pre>
-                        </div>
-                      ))}
-
-                      {/* Paid sections */}
-                      <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <div className="text-sm font-semibold text-zinc-200">Commander Coaching (Locked)</div>
-                          <span className="rounded-full border border-amber-700/50 bg-amber-950/40 px-2 py-1 text-[11px] text-amber-200">
-                            Premium
-                          </span>
-                        </div>
-
-                        <div className="mb-3 text-sm text-zinc-400">
-                          These sections teach <span className="text-zinc-200">timing, examples, mistakes, politics</span>, and advanced synergy — the
-                          “how to play it correctly” part.
-                        </div>
-
-                        {!premiumPreview ? (
-                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                            <div className="text-sm font-semibold text-zinc-200">Locked</div>
-                            <div className="mt-1 text-sm text-zinc-400">
-                              Turn on <span className="text-zinc-200">Premium Preview</span> (button on the left card panel) to see how paid content will look.
-                            </div>
-                            <div className="mt-3 text-xs text-zinc-500">This is a free local preview. No billing.</div>
-                          </div>
-                        ) : (
-                          <div className="space-y-4">
-                            {rhysticSections.paid.map((sec) => (
+                            {commanderSplit.paid.map((sec) => (
                               <div key={sec.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
                                 <div className="mb-2 text-sm font-semibold text-zinc-200">{sec.title}</div>
                                 <pre className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
@@ -1410,37 +1336,34 @@ export default function Page() {
                       </div>
                     </>
                   ) : (
-                    <>
-                      {/* Normal explanation block */}
-                      <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <div className="text-sm font-semibold text-zinc-200">Explanation</div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => callAI('explain')}
-                              disabled={aiLoading}
-                              className={cx(
-                                'rounded-xl border px-3 py-2 text-xs font-semibold',
-                                'border-zinc-800 bg-zinc-900 text-zinc-200 hover:bg-zinc-800/60',
-                                aiLoading && 'opacity-60 cursor-not-allowed'
-                              )}
-                            >
-                              Improve with AI
-                            </button>
-                          </div>
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <div className="text-sm font-semibold text-zinc-200">Explanation</div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => callAI('explain')}
+                            disabled={aiLoading}
+                            className={cx(
+                              'rounded-xl border px-3 py-2 text-xs font-semibold',
+                              'border-zinc-800 bg-zinc-900 text-zinc-200 hover:bg-zinc-800/60',
+                              aiLoading && 'opacity-60 cursor-not-allowed'
+                            )}
+                          >
+                            Improve with AI
+                          </button>
                         </div>
-
-                        {aiError && (
-                          <div className="mb-3 rounded-xl border border-red-900/50 bg-red-950/30 p-3 text-sm text-red-200">
-                            {aiError}
-                          </div>
-                        )}
-
-                        <pre className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
-                          {renderTextWithTooltips(explanation || '—', hoverKey, setHoverKey, pinnedKey, setPinnedKey)}
-                        </pre>
                       </div>
-                    </>
+
+                      {aiError && (
+                        <div className="mb-3 rounded-xl border border-red-900/50 bg-red-950/30 p-3 text-sm text-red-200">
+                          {aiError}
+                        </div>
+                      )}
+
+                      <pre className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
+                        {renderTextWithTooltips(explanation || '—', hoverKey, setHoverKey, pinnedKey, setPinnedKey)}
+                      </pre>
+                    </div>
                   )}
                 </div>
               )}
