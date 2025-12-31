@@ -461,6 +461,7 @@ function buildStandardSynergies(card: ScryfallCard): string {
   if (typeLine.includes('equipment')) {
     pairs.push('• Creatures with strong combat triggers (haste/evasion helps).');
     pairs.push('• Cheap creatures (more targets for Equipment).');
+    pairs.push('• These highlight keywords like equip.');
   }
   if (pairs.length === 0) pairs.push('• Cards that share the same theme or resource (mana, tokens, graveyard, etc.).');
 
@@ -568,7 +569,7 @@ const MANUAL_KEYS = new Set(Object.keys(MANUAL_EXPLAINERS).map((k) => k.toLowerC
 
 /**
  * =========================
- * Premium Split (Sol Ring)
+ * Premium Split (Commander)
  * =========================
  * Free shows:
  * - Snapshot
@@ -708,8 +709,133 @@ function buildSolRingCommanderSections(): { snapshot: CommanderSnapshot; summary
   return { snapshot, summary, free, paid };
 }
 
+function buildRhysticStudyCommanderSections(): { snapshot: CommanderSnapshot; summary: string; free: CommanderSection[]; paid: CommanderSection[] } {
+  const snapshot: CommanderSnapshot = {
+    role: 'Card advantage / Tax',
+    speed: 'Early–Mid',
+    complexity: 'Beginner–Intermediate',
+    tableImpact: 'High (often draws attention and changes table behavior)',
+  };
+
+  const summary =
+    'Rhystic Study turns every opponent’s spell into a choice: pay {1} or give you a card — and in Commander, that adds up fast across three opponents.';
+
+  const free: CommanderSection[] = [
+    {
+      id: 'what',
+      title: 'What this card does (plain English)',
+      premium: false,
+      body: [
+        '• Whenever an opponent casts a spell, you may draw a card unless that player pays {1}.',
+        '• If they pay, you do not draw — but their turn is slowed down by 1 mana.',
+        '• If they don’t pay, you draw — and over time you get far ahead on cards.',
+        '',
+        'In simple terms: opponents either slow themselves down or they feed you cards.',
+      ].join('\n'),
+    },
+    {
+      id: 'why',
+      title: 'Why people play this in Commander (high-level)',
+      premium: false,
+      body: [
+        '• Commander has 3 opponents — so you get far more chances to trigger it.',
+        '• Many turns involve multiple spells (ramp, rocks, tutors, removal).',
+        '• Even when opponents “pay the 1,” you’ve still taxed their mana and reduced their tempo.',
+        '',
+        'It’s a classic blue value engine that pressures the table the entire game.',
+      ].join('\n'),
+    },
+  ];
+
+  const paid: CommanderSection[] = [
+    {
+      id: 'timing',
+      title: 'When to play Rhystic Study (timing matters)',
+      premium: true,
+      body: [
+        'Best windows:',
+        '• Turn 2–3 is ideal (especially if opponents are still developing and can’t spare mana).',
+        '• Right before the table’s “setup turns” (ramp / draw / tutors) makes it harder to pay.',
+        '',
+        'Be careful:',
+        '• If you are already far ahead, slamming it can make you the archenemy.',
+        '• If you can protect it (countermagic / bounce), it becomes much stronger.',
+        '',
+        'Late game:',
+        '• Still good — but opponents often have spare mana, so expect more paying.',
+      ].join('\n'),
+    },
+    {
+      id: 'examples',
+      title: 'Example plays (Commander coaching)',
+      premium: true,
+      body: [
+        'Example 1 — Turn 3 Rhystic + hold up interaction:',
+        '• You play Rhystic Study and keep 1–2 mana open.',
+        '• Opponents are pressured: if they tap out, you draw; if they pay, their turn is slower; if they try to remove it, you can respond.',
+        '',
+        'Example 2 — After a board wipe:',
+        '• You drop Rhystic when the board is reset.',
+        '• Everyone tries to rebuild with multiple spells — you either draw a lot or they lose tempo.',
+        '',
+        'Example 3 — Versus the “big turn” player:',
+        '• When a spellslinger or storm-style deck tries to chain spells, Rhystic forces extra payments or gives you a huge hand to fight back.',
+      ].join('\n'),
+    },
+    {
+      id: 'mistakes',
+      title: 'Common beginner mistakes',
+      premium: true,
+      body: [
+        '• Missing triggers: you must notice each opponent spell and resolve the choice.',
+        '• Slowing the game too much: be consistent and quick with “Rhystic trigger — pay {1}?”',
+        '• Casting it with zero protection when the table is clearly holding removal.',
+        '• Getting emotional if people start paying — the tax is still valuable.',
+        '• Forgetting that it triggers on “boring” spells too (mana rocks, ramp, tutors, removal).',
+      ].join('\n'),
+    },
+    {
+      id: 'politics',
+      title: 'Table impact & politics (Commander-only)',
+      premium: true,
+      body: [
+        'Rhystic Study changes table behavior immediately.',
+        '',
+        'How to pilot it cleanly:',
+        '• Keep your tone neutral: “Rhystic trigger — pay {1}?”',
+        '• Don’t shame or argue — that makes you the target.',
+        '• If one player is popping off, remind the table that paying matters *for that player’s turn*.',
+        '',
+        'Reality:',
+        '• You will draw attention. Sometimes that’s fine because Rhystic keeps your hand full to defend yourself.',
+      ].join('\n'),
+    },
+    {
+      id: 'synergies',
+      title: 'Advanced synergies (Commander)',
+      premium: true,
+      body: [
+        'Rhystic Study is especially strong with:',
+        '• Instant-speed interaction (holding mana up makes paying {1} much harder)',
+        '• Additional tax effects (anything that squeezes mana makes “pay {1}” painful)',
+        '• Wheel / refill turns (opponents rebuilding often cast multiple spells)',
+        '• Protection and recursion (if your deck can protect or replay enchantments)',
+        '',
+        'Concept:',
+        '• Rhystic doesn’t need combos — it just turns time into cards. The longer it survives, the more it dominates.',
+      ].join('\n'),
+    },
+  ];
+
+  return { snapshot, summary, free, paid };
+}
+
 function isSolRing(name: string) {
   return normalizeName(name) === 'sol ring';
+}
+
+function isRhysticStudy(name: string) {
+  return normalizeName(name) === 'rhystic study';
 }
 
 /**
@@ -850,9 +976,9 @@ export default function Page() {
       // Manual explainer fallback
       const manual = MANUAL_EXPLAINERS[data.name];
       if (manual) {
-        // For Sol Ring, we use the new Commander split UI (handled in render)
+        // For Sol Ring + Rhystic Study, we use the new Commander split UI (handled in render)
         // For others, keep existing manual text behavior
-        if (!isSolRing(data.name)) {
+        if (!isSolRing(data.name) && !isRhysticStudy(data.name)) {
           const manualText = [
             `Manual Explainer: ${manual.title}`,
             '',
@@ -863,13 +989,11 @@ export default function Page() {
             '',
             `Quick tips:`,
             ...manual.tips.map((t) => `• ${t}`),
-            ...(manual.gotchas?.length
-              ? ['', `Gotchas:`, ...manual.gotchas.map((g) => `• ${g}`)]
-              : []),
+            ...(manual.gotchas?.length ? ['', `Gotchas:`, ...manual.gotchas.map((g) => `• ${g}`)] : []),
           ].join('\n');
           setExplanation(manualText);
         } else {
-          setExplanation(''); // Sol Ring is rendered from structured sections
+          setExplanation(''); // Structured sections render these cards
         }
       } else {
         // Deterministic standard explanation for everyone else
@@ -941,6 +1065,10 @@ export default function Page() {
   const tags = useMemo(() => buildContextTags(card), [card]);
 
   const solRingSections = useMemo(() => (card && isSolRing(card.name) ? buildSolRingCommanderSections() : null), [card]);
+  const rhysticSections = useMemo(
+    () => (card && isRhysticStudy(card.name) ? buildRhysticStudyCommanderSections() : null),
+    [card]
+  );
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -1191,6 +1319,85 @@ export default function Page() {
                         ) : (
                           <div className="space-y-4">
                             {solRingSections.paid.map((sec) => (
+                              <div key={sec.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                                <div className="mb-2 text-sm font-semibold text-zinc-200">{sec.title}</div>
+                                <pre className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
+                                  {renderTextWithTooltips(sec.body, hoverKey, setHoverKey, pinnedKey, setPinnedKey)}
+                                </pre>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : rhysticSections ? (
+                    <>
+                      {/* Snapshot */}
+                      <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                        <div className="mb-2 text-sm font-semibold text-zinc-200">Commander Snapshot (Free)</div>
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-200">
+                            Role: {rhysticSections.snapshot.role}
+                          </span>
+                          <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-200">
+                            Speed: {rhysticSections.snapshot.speed}
+                          </span>
+                          <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-200">
+                            Complexity: {rhysticSections.snapshot.complexity}
+                          </span>
+                          {rhysticSections.snapshot.tableImpact && (
+                            <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-200">
+                              Table Impact: {rhysticSections.snapshot.tableImpact}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-4">
+                          <div className="mb-2 text-sm font-semibold text-zinc-200">One-sentence summary (Free)</div>
+                          <p className="text-sm leading-relaxed text-zinc-200">{rhysticSections.summary}</p>
+                        </div>
+                      </div>
+
+                      {/* Free sections */}
+                      {rhysticSections.free.map((sec) => (
+                        <div key={sec.id} className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <div className="text-sm font-semibold text-zinc-200">{sec.title}</div>
+                            <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300">
+                              Free
+                            </span>
+                          </div>
+                          <pre className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
+                            {renderTextWithTooltips(sec.body, hoverKey, setHoverKey, pinnedKey, setPinnedKey)}
+                          </pre>
+                        </div>
+                      ))}
+
+                      {/* Paid sections */}
+                      <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <div className="text-sm font-semibold text-zinc-200">Commander Coaching (Locked)</div>
+                          <span className="rounded-full border border-amber-700/50 bg-amber-950/40 px-2 py-1 text-[11px] text-amber-200">
+                            Premium
+                          </span>
+                        </div>
+
+                        <div className="mb-3 text-sm text-zinc-400">
+                          These sections teach <span className="text-zinc-200">timing, examples, mistakes, politics</span>, and advanced synergy — the
+                          “how to play it correctly” part.
+                        </div>
+
+                        {!premiumPreview ? (
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                            <div className="text-sm font-semibold text-zinc-200">Locked</div>
+                            <div className="mt-1 text-sm text-zinc-400">
+                              Turn on <span className="text-zinc-200">Premium Preview</span> (button on the left card panel) to see how paid content will look.
+                            </div>
+                            <div className="mt-3 text-xs text-zinc-500">This is a free local preview. No billing.</div>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {rhysticSections.paid.map((sec) => (
                               <div key={sec.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
                                 <div className="mb-2 text-sm font-semibold text-zinc-200">{sec.title}</div>
                                 <pre className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
