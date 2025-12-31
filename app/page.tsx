@@ -367,7 +367,12 @@ function buildStandardExplanation(card: ScryfallCard): string {
   if (tl.includes('creature') && (card.power || card.toughness)) what.push(`• It is a creature (${card.power ?? '?'} / ${card.toughness ?? '?'}). It can attack and block.`);
   if (tl.includes('planeswalker')) what.push('• It is a planeswalker. You activate one loyalty ability per turn (on your turn).');
 
-  if (what.length === 0) what.push(oracle.trim() ? '• This card’s main effect is described in its oracle text below.' : '• This card does not have oracle text (or it was not available from Scryfall).');
+  if (what.length === 0)
+    what.push(
+      oracle.trim()
+        ? '• This card’s main effect is described in its oracle text below.'
+        : '• This card does not have oracle text (or it was not available from Scryfall).'
+    );
 
   why.push('• In Commander, cards that create value, tempo, or answers tend to perform well over long games.');
 
@@ -421,7 +426,8 @@ function buildStandardSynergies(card: ScryfallCard): string {
 
   if (tags.includes('artifact')) themes.push('• Artifacts');
   if (tags.includes('enchantment')) themes.push('• Enchantments');
-  if (tags.includes('instant') || tags.includes('sorcery') || tags.includes('cast-triggers')) themes.push('• Spellslinger (many instants/sorceries)');
+  if (tags.includes('instant') || tags.includes('sorcery') || tags.includes('cast-triggers'))
+    themes.push('• Spellslinger (many instants/sorceries)');
   if (tags.includes('tokens')) themes.push('• Token swarm / go-wide');
   if (tags.includes('graveyard')) themes.push('• Graveyard / recursion');
   if (tags.includes('sacrifice')) themes.push('• Sacrifice / aristocrats');
@@ -564,18 +570,6 @@ const MANUAL_EXPLAINERS: Record<
  * =========================
  * Premium Split (Commander)
  * =========================
- * Free shows:
- * - Snapshot
- * - One-sentence summary
- * - What it does
- * - Why people play it (high-level)
- *
- * Locked shows:
- * - When to play
- * - Example plays
- * - Beginner mistakes
- * - Table impact/politics
- * - Advanced synergies
  */
 type CommanderSnapshot = {
   role: string;
@@ -830,17 +824,137 @@ function buildRhysticStudyCommanderSections(): CommanderSplit {
   return { snapshot, summary, free, paid };
 }
 
+function buildSmotheringTitheCommanderSections(): CommanderSplit {
+  const snapshot: CommanderSnapshot = {
+    role: 'Ramp / Treasure engine',
+    speed: 'Mid',
+    complexity: 'Beginner–Intermediate',
+    tableImpact: 'High (forces table to pay or give you Treasures)',
+  };
+
+  const summary =
+    'Smothering Tithe turns every opponent draw into a choice: pay {2} or give you a Treasure — and in Commander, that usually means a flood of mana over time.';
+
+  const free: CommanderSection[] = [
+    {
+      id: 'what',
+      title: 'What this card does (plain English)',
+      premium: false,
+      body: [
+        '• Whenever an opponent draws a card, that player may pay {2}.',
+        '• If they don’t pay, you create a Treasure token.',
+        '• Treasures can be sacrificed to add one mana of any color.',
+        '',
+        'In simple terms: opponents either spend extra mana or they give you extra mana.',
+      ].join('\n'),
+    },
+    {
+      id: 'why',
+      title: 'Why people play this in Commander (high-level)',
+      premium: false,
+      body: [
+        '• Commander has 3 opponents, so there are a lot of draw steps and draw spells.',
+        '• Most players can’t afford to pay {2} repeatedly all game.',
+        '• Treasures fix your colors and let you take big turns earlier.',
+        '',
+        'If it survives for even a couple turns, it often pays for itself and then some.',
+      ].join('\n'),
+    },
+  ];
+
+  const paid: CommanderSection[] = [
+    {
+      id: 'timing',
+      title: 'When to play Smothering Tithe (timing matters)',
+      premium: true,
+      body: [
+        'Best windows:',
+        '• When opponents are about to start drawing extra cards (Rhystic Study, wheel effects, big draw spells).',
+        '• Right before your own “big turn” so you can stockpile Treasures for a huge sequence.',
+        '',
+        'Be careful:',
+        '• If you cast it into open mana and the table is holding removal, it may die before it produces value.',
+        '• If you are already ahead, this can instantly make you the archenemy.',
+        '',
+        'Late game:',
+        '• Still strong because it turns draw-heavy turns into a burst of Treasures.',
+      ].join('\n'),
+    },
+    {
+      id: 'examples',
+      title: 'Example plays (Commander coaching)',
+      premium: true,
+      body: [
+        'Example 1 — “One turn cycle” value:',
+        '• You play Smothering Tithe and pass.',
+        '• Over the next three draw steps alone, opponents likely can’t pay {2} each time → you get multiple Treasures immediately.',
+        '',
+        'Example 2 — Wheel punisher:',
+        '• An opponent casts a wheel (everyone discards and draws 7).',
+        '• Smothering Tithe triggers for each opponent draw → you can make a huge pile of Treasures and often win on the spot if you’re set up.',
+        '',
+        'Example 3 — Convert Treasures into safety:',
+        '• Use Treasures to keep interaction mana up (removal/counters) while still developing your board.',
+      ].join('\n'),
+    },
+    {
+      id: 'mistakes',
+      title: 'Common beginner mistakes',
+      premium: true,
+      body: [
+        '• Waiting too long: Tithe is best before draw-heavy turns, not after.',
+        '• Not tracking triggers: it triggers on every draw by opponents (including extra draws).',
+        '• Hoarding Treasures forever: convert them into advantage before someone removes Tithe or wipes artifacts.',
+        '• Spending Treasures mindlessly: sometimes the best use is holding up interaction, not casting random stuff.',
+        '• Forgetting you can make any color: use Treasures to fix awkward mana.',
+      ].join('\n'),
+    },
+    {
+      id: 'politics',
+      title: 'Table impact & politics (Commander-only)',
+      premium: true,
+      body: [
+        'Smothering Tithe can change the “social” balance of the table.',
+        '',
+        'How to pilot it cleanly:',
+        '• Don’t argue about payments — ask neutrally: “Pay {2}?”',
+        '• Be fast and consistent so you don’t slow the game down.',
+        '• If one player is clearly ahead, you can frame Tithe as a way to keep up — but expect people to still remove it.',
+        '',
+        'Reality:',
+        '• Many tables treat Tithe as a must-kill card. Plan for that.',
+      ].join('\n'),
+    },
+    {
+      id: 'synergies',
+      title: 'Advanced synergies (Commander)',
+      premium: true,
+      body: [
+        'Smothering Tithe is especially strong with:',
+        '• Wheel effects and mass draw (lots of triggers at once)',
+        '• Any card that makes opponents draw extra cards',
+        '• Artifact payoffs (cards that care about artifacts entering the battlefield)',
+        '• Big mana payoffs and X-spells (Treasures fuel huge turns)',
+        '• Sacrifice synergies (Treasures are artifacts you can sacrifice for value)',
+        '',
+        'Concept:',
+        '• Tithe turns “time + opponent draws” into mana. The more draw in your meta, the more oppressive it becomes.',
+      ].join('\n'),
+    },
+  ];
+
+  return { snapshot, summary, free, paid };
+}
+
 /**
  * =========================
- * Commander Split Registry (REFactor)
+ * Commander Split Registry
  * =========================
- * Add new staple splits here:
- *  - key = normalizeName(cardName)
- *  - value = function that returns the split sections
  */
 const COMMANDER_SPLIT_BUILDERS: Record<string, () => CommanderSplit> = {
   [normalizeName('Sol Ring')]: buildSolRingCommanderSections,
   [normalizeName('Rhystic Study')]: buildRhysticStudyCommanderSections,
+  [normalizeName('Smothering Tithe')]: buildSmotheringTitheCommanderSections,
 };
 
 function getCommanderSplitForCardName(name: string): CommanderSplit | null {
@@ -984,10 +1098,8 @@ export default function Page() {
 
       setCard(data);
 
-      // Manual explainer fallback
       const manual = MANUAL_EXPLAINERS[data.name];
       if (manual) {
-        // If this card is in the Commander Split registry, explanation is rendered from structured sections
         if (!isCommanderSplitCard(data.name)) {
           const manualText = [
             `Manual Explainer: ${manual.title}`,
@@ -1072,7 +1184,6 @@ export default function Page() {
   const manaCost = useMemo(() => getManaCost(card), [card]);
   const tags = useMemo(() => buildContextTags(card), [card]);
 
-  // ✅ One generic split lookup (this is the refactor)
   const commanderSplit = useMemo(() => (card ? getCommanderSplitForCardName(card.name) : null), [card]);
 
   return (
